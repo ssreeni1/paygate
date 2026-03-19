@@ -3,6 +3,7 @@ use crate::db::{DbReader, DbWriter};
 use crate::rate_limit::RateLimiter;
 use crate::webhook::WebhookSender;
 use arc_swap::ArcSwap;
+use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 
 /// Shared application state accessible by all middleware and handlers.
@@ -14,6 +15,8 @@ pub struct AppState {
     pub http_client: reqwest::Client,
     pub rate_limiter: Arc<RateLimiter>,
     pub webhook_sender: Option<WebhookSender>,
+    pub prometheus_handle: PrometheusHandle,
+    pub started_at: std::time::Instant,
 }
 
 impl AppState {
