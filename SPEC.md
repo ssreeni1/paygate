@@ -106,7 +106,7 @@ X-Payment-Methods: direct,session
 
 > **Open question — MPP header format**: The `X-Payment-*` header names are PayGate-specific. The formal MPP wire protocol spec has not been published as of March 2026. If/when Tempo publishes the MPP spec, these headers should be updated to match. Track at: https://github.com/tempoxyz/tempo/issues (MPP spec). Until then, `tempo curl` compatibility is aspirational, not guaranteed.
 
-> **Open question — Chain ID and RPC**: Tempo mainnet chain ID and RPC URL must be verified from [Tempo's official chain config](https://docs.tempo.xyz/) before implementation. The testnet chain is available as `tempoTestnet` from `viem/chains`. Config values shown are placeholders.
+> **Resolved — Chain ID and RPC**: Tempo mainnet chain ID is **4217**, RPC is `https://rpc.presto.tempo.xyz`. The testnet chain is `tempoModerato` (chain ID 42431) from `viem/chains`. The mainnet chain export is `tempo` (not `tempoMainnet`). See the [SDK verification report](docs/designs/tempo-sdk-verification.md).
 
 ### 4.2 Direct Payment Flow
 
@@ -431,7 +431,7 @@ const account = Account.fromSecp256k1(process.env.TEMPO_PRIVATE_KEY!);
 
 const tempoClient = createClient({
   account,
-  chain: tempoTestnet,
+  chain: tempoModerato,
   transport: http(),
 })
   .extend(publicActions)
@@ -1072,10 +1072,16 @@ paygate/
 
 | # | Question | Impact | Resolution Path |
 |---|----------|--------|----------------|
-| 1 | Tempo mainnet chain ID and RPC URL | Config defaults, client SDK chain config | Verify from `viem/chains` or docs.tempo.xyz when mainnet chain object is published |
+| 1 | ~~Tempo mainnet chain ID and RPC URL~~ | ~~Config defaults, client SDK chain config~~ | **Resolved.** Chain ID 4217, RPC `https://rpc.presto.tempo.xyz`, chain export `tempo` from `viem/chains`. |
 | 2 | Mainnet USDC token contract address | `accepted_token` default in `paygate init` | Check Tempo mainnet token registry after launch |
-| 3 | Formal MPP wire protocol spec | Header format, `tempo curl` compatibility | Track Tempo GitHub for MPP spec publication |
+| 3 | ~~Formal MPP wire protocol spec~~ | ~~Header format, `tempo curl` compatibility~~ | **Resolved.** MPP spec published at [mpp.dev](https://mpp.dev/overview) and [github.com/tempoxyz/mpp-specs](https://github.com/tempoxyz/mpp-specs). Uses `WWW-Authenticate: Payment` / `Authorization: Payment` auth scheme, not `X-Payment-*` headers. CLI is `npx mppx`, not `tempo curl`. |
 | 4 | Tempo fee payer service protocol | `/paygate/sponsor` implementation details | Reference `viem/tempo` `withFeePayer` transport source code |
+| 5 | Testnet stablecoin is PathUSD, not USDC | Test config, `paygate demo`, e2e tests | Testnet uses PathUSD at `0x20c0000000000000000000000000000000000000`. Mainnet will have real USDC. Tests must use the PathUSD address. |
+
+### Tempo Explorer URLs
+
+- **Mainnet**: `https://explore.tempo.xyz/`
+- **Testnet (Moderato)**: `https://explore.moderato.tempo.xyz/`
 
 ## 16. Verification Plan
 

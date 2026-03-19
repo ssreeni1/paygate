@@ -24,5 +24,5 @@ interface ITIP20 {
     // Events
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
-    event TransferWithMemo(address indexed from, address indexed to, uint256 value, bytes32 memo);
+    event TransferWithMemo(address indexed from, address indexed to, uint256 value, bytes32 indexed memo);
 }

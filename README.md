@@ -92,13 +92,13 @@ The TypeScript SDK handles the 402 negotiation automatically:
 import { PayGateClient } from '@paygate/sdk';
 import { createClient, http, publicActions, walletActions } from 'viem';
 import { Account, tempoActions } from 'viem/tempo';
-import { tempoTestnet } from 'viem/chains';
+import { tempoModerato } from 'viem/chains'; // testnet; use `tempo` for mainnet
 
 const account = Account.fromSecp256k1(process.env.TEMPO_PRIVATE_KEY!);
 
 const tempoClient = createClient({
   account,
-  chain: tempoTestnet,
+  chain: tempoModerato,
   transport: http(),
 })
   .extend(publicActions)

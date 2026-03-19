@@ -148,7 +148,7 @@ upstream_timeout_seconds = 30    # timeout for upstream forwarding
 
 **SDK Verification:** Before writing any code, verify all Tempo SDK APIs referenced in the spec actually exist:
 - `viem/tempo`: Account.fromSecp256k1, tempoActions(), withFeePayer
-- `viem/chains`: tempoTestnet / tempoMainnet chain objects
+- `viem/chains`: `tempoModerato` (testnet) / `tempo` (mainnet) chain objects
 - TIP-20 Transfer and TransferWithMemo event ABIs
 - `tempo_fundAddress` RPC method
 
