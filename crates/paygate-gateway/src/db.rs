@@ -1,6 +1,5 @@
 use paygate_common::types::{BaseUnits, PaymentRecord, Quote};
 use rusqlite::{Connection, params};
-use std::path::Path;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -430,11 +429,12 @@ pub async fn cleanup_task(reader: DbReader, retention_days: u32) {
             // Clean up old request logs (batched to avoid blocking)
             let log_cutoff = now - (retention_days as i64 * 86400);
             loop {
-                match conn.execute(
+                let deleted = conn.execute(
                     "DELETE FROM request_log WHERE rowid IN
                      (SELECT rowid FROM request_log WHERE created_at < ? LIMIT 5000)",
                     params![log_cutoff],
-                ) {
+                );
+                match deleted {
                     Ok(n) if n > 0 => {
                         info!("Cleaned up {n} old request log entries");
                         if n < 5000 {
