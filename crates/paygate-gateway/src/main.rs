@@ -77,6 +77,32 @@ enum Commands {
         #[arg(short, long, default_value = "paygate.toml")]
         config: String,
     },
+    /// Register service in on-chain PayGateRegistry
+    Register {
+        /// Service name
+        #[arg(long)]
+        name: String,
+
+        /// Price per request in USDC (e.g., "0.001")
+        #[arg(long)]
+        price: String,
+
+        /// Accepted TIP-20 token address
+        #[arg(long, default_value = "0x20c0000000000000000000000000000000000000")]
+        token: String,
+
+        /// URL to pricing/metadata JSON
+        #[arg(long, default_value = "")]
+        metadata_url: String,
+
+        /// PayGateRegistry contract address
+        #[arg(long)]
+        registry: String,
+
+        /// Config file path
+        #[arg(short, long, default_value = "paygate.toml")]
+        config: String,
+    },
 }
 
 #[tokio::main]
@@ -93,6 +119,9 @@ async fn main() {
         Commands::Demo => cmd_test(true).await,
         Commands::Test => cmd_test(false).await,
         Commands::Sessions { config } => cmd_sessions(&config),
+        Commands::Register { name, price, token, metadata_url, registry, config } => {
+            cmd_register(&name, &price, &token, &metadata_url, &registry, &config).await
+        }
     }
 }
 
@@ -1351,6 +1380,427 @@ fn cmd_sessions(config_path: &str) {
     );
 }
 
+// ─── register ─────────────────────────────────────────────────────────────────
+
+use alloy_primitives::{Address, FixedBytes, U256, keccak256};
+use alloy_sol_types::{SolCall, SolEvent};
+
+alloy_sol_types::sol! {
+    function registerService(
+        string name,
+        uint256 pricePerRequest,
+        address acceptedToken,
+        string metadataUri
+    ) external returns (bytes32 serviceId);
+
+    event ServiceRegistered(bytes32 indexed serviceId, address indexed provider, uint256 price);
+}
+
+async fn cmd_register(
+    name: &str,
+    price: &str,
+    token: &str,
+    metadata_url: &str,
+    registry: &str,
+    config_path: &str,
+) {
+    let config = load_config_or_exit(config_path);
+
+    eprintln!();
+    eprintln!("  PayGate Registry");
+    eprintln!("  \u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}");
+    eprintln!("  Registering service...");
+    eprintln!();
+
+    // 1. Parse price to base units
+    let price_base_units = parse_price_to_base_units(price).unwrap_or_else(|e| {
+        eprintln!("  error: invalid price \"{price}\" \u{2014} {e}");
+        std::process::exit(1);
+    });
+
+    // 2. Load private key
+    let private_key = std::env::var(&config.tempo.private_key_env).unwrap_or_else(|_| {
+        eprintln!("  error: {} not set", config.tempo.private_key_env);
+        eprintln!(
+            "    hint: export {}=<your-tempo-private-key>",
+            config.tempo.private_key_env
+        );
+        std::process::exit(1);
+    });
+
+    // 3. Parse addresses
+    let token_addr: Address = token.parse().unwrap_or_else(|_| {
+        eprintln!("  error: invalid token address: {token}");
+        std::process::exit(1);
+    });
+
+    let registry_addr: Address = registry.parse().unwrap_or_else(|_| {
+        eprintln!("  error: invalid registry address: {registry}");
+        eprintln!("    hint: pass --registry <address>");
+        std::process::exit(1);
+    });
+
+    // 4. Derive provider address from private key
+    let pk_bytes = private_key.strip_prefix("0x").unwrap_or(&private_key);
+    let pk_decoded = hex::decode(pk_bytes).unwrap_or_else(|_| {
+        eprintln!("  error: invalid private key hex");
+        std::process::exit(1);
+    });
+    if pk_decoded.len() != 32 {
+        eprintln!("  error: private key must be 32 bytes");
+        std::process::exit(1);
+    }
+    let signing_key = k256::ecdsa::SigningKey::from_bytes(pk_decoded.as_slice().into())
+        .unwrap_or_else(|_| {
+            eprintln!("  error: invalid private key");
+            std::process::exit(1);
+        });
+    let verifying_key = signing_key.verifying_key();
+    let public_key_bytes = verifying_key.to_encoded_point(false);
+    let provider_address = Address::from_slice(
+        &keccak256(&public_key_bytes.as_bytes()[1..])[12..],
+    );
+
+    // 5. Encode the registerService call
+    let call = registerServiceCall {
+        name: name.to_string(),
+        pricePerRequest: U256::from(price_base_units),
+        acceptedToken: token_addr,
+        metadataUri: metadata_url.to_string(),
+    };
+    let calldata = hex::encode(call.abi_encode());
+
+    // 6. Get nonce via eth_getTransactionCount
+    let http_client = reqwest::Client::new();
+    let rpc_url = config.tempo.rpc_urls.first().unwrap_or_else(|| {
+        eprintln!("  error: no RPC URL configured");
+        std::process::exit(1);
+    });
+
+    let nonce = rpc_get_nonce(&http_client, rpc_url, &provider_address).await;
+
+    // 7. Build EIP-1559 transaction
+    let chain_id = if config.tempo.chain_id > 0 {
+        config.tempo.chain_id
+    } else {
+        4217 // Tempo mainnet default
+    };
+
+    let gas_limit: u64 = 300_000;
+
+    // Get gas price
+    let gas_price = rpc_gas_price(&http_client, rpc_url).await;
+
+    // Build raw tx with EIP-155 signing
+    let tx_data = hex::decode(&calldata).unwrap();
+
+    // RLP-encode and sign the transaction (legacy tx for compatibility)
+    let raw_tx = sign_legacy_tx(
+        &signing_key,
+        nonce,
+        gas_price,
+        gas_limit,
+        registry_addr,
+        U256::ZERO,
+        &tx_data,
+        chain_id,
+    );
+
+    // 8. Send via eth_sendRawTransaction
+    let tx_hash = rpc_send_raw_tx(&http_client, rpc_url, &raw_tx).await;
+
+    let price_display = paygate_common::types::format_usd(price_base_units, TOKEN_DECIMALS);
+    eprintln!("  Name:     {name}");
+    eprintln!("  Price:    {price_display}/request");
+    eprintln!("  Token:    {}", truncate_address(token));
+    eprintln!("  Provider: {}", truncate_address(&format!("{provider_address}")));
+    eprintln!();
+
+    // 9. Wait for receipt
+    eprintln!("  Transaction: {tx_hash}");
+    let receipt = rpc_wait_for_receipt(&http_client, rpc_url, &tx_hash).await;
+
+    // 10. Decode ServiceRegistered event from receipt logs
+    let service_id = decode_service_registered(&receipt);
+
+    match service_id {
+        Some(id) => {
+            eprintln!("  Service ID:  0x{}", hex::encode(id));
+        }
+        None => {
+            // Check if tx reverted
+            let status = receipt["status"].as_str().unwrap_or("0x0");
+            if status == "0x0" {
+                eprintln!();
+                eprintln!("  error: registration transaction reverted");
+                eprintln!("    hint: check the transaction on the explorer for details");
+            } else {
+                eprintln!("  Service ID:  (could not decode from logs)");
+            }
+        }
+    }
+
+    // Explorer link
+    let explorer_base = if config.tempo.network == "mainnet" {
+        "https://explore.tempo.xyz"
+    } else {
+        "https://explore.moderato.tempo.xyz"
+    };
+    eprintln!();
+    eprintln!("  View on explorer:");
+    eprintln!("    {explorer_base}/tx/{tx_hash}");
+    eprintln!();
+    eprintln!("  Your service is now discoverable on-chain!");
+}
+
+async fn rpc_get_nonce(client: &reqwest::Client, rpc_url: &str, address: &Address) -> u64 {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getTransactionCount",
+        "params": [format!("{address}"), "latest"],
+        "id": 1
+    });
+    let resp = client
+        .post(rpc_url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("  error: Tempo RPC unreachable: {e}");
+            eprintln!("    hint: check your network and rpc_urls in paygate.toml");
+            std::process::exit(1);
+        });
+    let json: serde_json::Value = resp.json().await.unwrap_or_default();
+    let hex_str = json["result"].as_str().unwrap_or("0x0");
+    u64::from_str_radix(hex_str.trim_start_matches("0x"), 16).unwrap_or(0)
+}
+
+async fn rpc_gas_price(client: &reqwest::Client, rpc_url: &str) -> u64 {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_gasPrice",
+        "params": [],
+        "id": 1
+    });
+    let resp = client
+        .post(rpc_url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .unwrap_or_else(|_| {
+            eprintln!("  error: failed to get gas price");
+            std::process::exit(1);
+        });
+    let json: serde_json::Value = resp.json().await.unwrap_or_default();
+    let hex_str = json["result"].as_str().unwrap_or("0x3B9ACA00"); // 1 gwei fallback
+    u64::from_str_radix(hex_str.trim_start_matches("0x"), 16).unwrap_or(1_000_000_000)
+}
+
+async fn rpc_send_raw_tx(client: &reqwest::Client, rpc_url: &str, raw_tx: &[u8]) -> String {
+    let body = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_sendRawTransaction",
+        "params": [format!("0x{}", hex::encode(raw_tx))],
+        "id": 1
+    });
+    let resp = client
+        .post(rpc_url)
+        .json(&body)
+        .timeout(std::time::Duration::from_secs(30))
+        .send()
+        .await
+        .unwrap_or_else(|e| {
+            eprintln!("  error: failed to send transaction: {e}");
+            std::process::exit(1);
+        });
+    let json: serde_json::Value = resp.json().await.unwrap_or_default();
+    if let Some(error) = json.get("error") {
+        let msg = error["message"].as_str().unwrap_or("unknown error");
+        if msg.contains("insufficient") {
+            eprintln!("  error: insufficient balance for gas");
+            eprintln!("    hint: fund your wallet first");
+        } else {
+            eprintln!("  error: transaction failed: {msg}");
+        }
+        std::process::exit(1);
+    }
+    json["result"].as_str().unwrap_or("").to_string()
+}
+
+async fn rpc_wait_for_receipt(
+    client: &reqwest::Client,
+    rpc_url: &str,
+    tx_hash: &str,
+) -> serde_json::Value {
+    for _ in 0..30 {
+        let body = serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": "eth_getTransactionReceipt",
+            "params": [tx_hash],
+            "id": 1
+        });
+        if let Ok(resp) = client
+            .post(rpc_url)
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+        {
+            if let Ok(json) = resp.json::<serde_json::Value>().await {
+                if !json["result"].is_null() {
+                    return json["result"].clone();
+                }
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    eprintln!("  error: timed out waiting for transaction receipt");
+    std::process::exit(1);
+}
+
+fn decode_service_registered(receipt: &serde_json::Value) -> Option<FixedBytes<32>> {
+    let logs = receipt["logs"].as_array()?;
+    let event_sig = ServiceRegistered::SIGNATURE_HASH;
+
+    for log in logs {
+        let topics = log["topics"].as_array()?;
+        if topics.is_empty() {
+            continue;
+        }
+        let topic0 = topics[0].as_str()?;
+        let topic0_bytes: FixedBytes<32> = topic0.parse().ok()?;
+        if topic0_bytes == event_sig {
+            // serviceId is topic[1] (indexed)
+            if let Some(service_id_hex) = topics.get(1).and_then(|t| t.as_str()) {
+                return service_id_hex.parse::<FixedBytes<32>>().ok();
+            }
+        }
+    }
+    None
+}
+
+fn sign_legacy_tx(
+    signing_key: &k256::ecdsa::SigningKey,
+    nonce: u64,
+    gas_price: u64,
+    gas_limit: u64,
+    to: Address,
+    value: U256,
+    data: &[u8],
+    chain_id: u64,
+) -> Vec<u8> {
+    // RLP-encode the unsigned tx for signing (EIP-155)
+    let mut unsigned = Vec::new();
+    rlp_encode_u64(&mut unsigned, nonce);
+    rlp_encode_u64(&mut unsigned, gas_price);
+    rlp_encode_u64(&mut unsigned, gas_limit);
+    rlp_encode_bytes(&mut unsigned, to.as_slice());
+    rlp_encode_u256(&mut unsigned, value);
+    rlp_encode_bytes(&mut unsigned, data);
+    // EIP-155: append chain_id, 0, 0
+    rlp_encode_u64(&mut unsigned, chain_id);
+    rlp_encode_u64(&mut unsigned, 0);
+    rlp_encode_u64(&mut unsigned, 0);
+
+    let encoded_unsigned = rlp_encode_list(&unsigned);
+    let msg_hash = keccak256(&encoded_unsigned);
+
+    // Sign
+    let (sig, recovery_id) = signing_key
+        .sign_prehash_recoverable(msg_hash.as_slice())
+        .unwrap_or_else(|e| {
+            eprintln!("  error: signing failed: {e}");
+            std::process::exit(1);
+        });
+
+    let v = recovery_id.to_byte() as u64 + chain_id * 2 + 35;
+    let r_bytes = sig.r().to_bytes();
+    let s_bytes = sig.s().to_bytes();
+
+    // RLP-encode the signed tx
+    let mut signed = Vec::new();
+    rlp_encode_u64(&mut signed, nonce);
+    rlp_encode_u64(&mut signed, gas_price);
+    rlp_encode_u64(&mut signed, gas_limit);
+    rlp_encode_bytes(&mut signed, to.as_slice());
+    rlp_encode_u256(&mut signed, value);
+    rlp_encode_bytes(&mut signed, data);
+    rlp_encode_u64(&mut signed, v);
+    rlp_encode_bytes(&mut signed, trim_leading_zeros(&r_bytes));
+    rlp_encode_bytes(&mut signed, trim_leading_zeros(&s_bytes));
+
+    rlp_encode_list(&signed)
+}
+
+fn trim_leading_zeros(bytes: &[u8]) -> &[u8] {
+    let start = bytes.iter().position(|&b| b != 0).unwrap_or(bytes.len());
+    &bytes[start..]
+}
+
+// Minimal RLP encoding helpers
+fn rlp_encode_u64(buf: &mut Vec<u8>, val: u64) {
+    if val == 0 {
+        buf.push(0x80);
+    } else if val < 128 {
+        buf.push(val as u8);
+    } else {
+        let bytes = val.to_be_bytes();
+        let start = bytes.iter().position(|&b| b != 0).unwrap_or(7);
+        let len = 8 - start;
+        buf.push(0x80 + len as u8);
+        buf.extend_from_slice(&bytes[start..]);
+    }
+}
+
+fn rlp_encode_u256(buf: &mut Vec<u8>, val: U256) {
+    if val.is_zero() {
+        buf.push(0x80);
+    } else {
+        let bytes: [u8; 32] = val.to_be_bytes();
+        let start = bytes.iter().position(|&b| b != 0).unwrap_or(31);
+        let trimmed = &bytes[start..];
+        if trimmed.len() == 1 && trimmed[0] < 128 {
+            buf.push(trimmed[0]);
+        } else {
+            buf.push(0x80 + trimmed.len() as u8);
+            buf.extend_from_slice(trimmed);
+        }
+    }
+}
+
+fn rlp_encode_bytes(buf: &mut Vec<u8>, data: &[u8]) {
+    if data.len() == 1 && data[0] < 128 {
+        buf.push(data[0]);
+    } else if data.len() < 56 {
+        buf.push(0x80 + data.len() as u8);
+        buf.extend_from_slice(data);
+    } else {
+        let len_bytes = data.len().to_be_bytes();
+        let start = len_bytes.iter().position(|&b| b != 0).unwrap_or(7);
+        let len_of_len = 8 - start;
+        buf.push(0xb7 + len_of_len as u8);
+        buf.extend_from_slice(&len_bytes[start..]);
+        buf.extend_from_slice(data);
+    }
+}
+
+fn rlp_encode_list(items: &[u8]) -> Vec<u8> {
+    let mut result = Vec::new();
+    if items.len() < 56 {
+        result.push(0xc0 + items.len() as u8);
+    } else {
+        let len_bytes = items.len().to_be_bytes();
+        let start = len_bytes.iter().position(|&b| b != 0).unwrap_or(7);
+        let len_of_len = 8 - start;
+        result.push(0xf7 + len_of_len as u8);
+        result.extend_from_slice(&len_bytes[start..]);
+    }
+    result.extend_from_slice(items);
+    result
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 fn load_config_or_exit(config_path: &str) -> Config {
@@ -1957,5 +2407,53 @@ mod tests {
             }
         }
         assert!(got_429, "402 flood limiter should eventually return 429");
+    }
+
+    // Register command: ABI encoding produces correct calldata
+    #[test]
+    fn test_register_service_abi_encoding() {
+        use alloy_sol_types::SolCall;
+
+        let call = registerServiceCall {
+            name: "my-api".to_string(),
+            pricePerRequest: U256::from(1000u64),
+            acceptedToken: "0x20c0000000000000000000000000000000000000"
+                .parse::<Address>()
+                .unwrap(),
+            metadataUri: "https://example.com/meta.json".to_string(),
+        };
+
+        let encoded = call.abi_encode();
+        // First 4 bytes are the function selector
+        let selector = &encoded[..4];
+        // registerService(string,uint256,address,string) selector
+        let expected_selector = &alloy_primitives::keccak256(
+            b"registerService(string,uint256,address,string)"
+        )[..4];
+        assert_eq!(selector, expected_selector, "function selector mismatch");
+
+        // Verify it round-trips
+        let decoded = registerServiceCall::abi_decode(&encoded).unwrap();
+        assert_eq!(decoded.name, "my-api");
+        assert_eq!(decoded.pricePerRequest, U256::from(1000u64));
+        assert_eq!(
+            decoded.acceptedToken,
+            "0x20c0000000000000000000000000000000000000"
+                .parse::<Address>()
+                .unwrap()
+        );
+        assert_eq!(decoded.metadataUri, "https://example.com/meta.json");
+    }
+
+    // Register command: ServiceRegistered event topic matches expected keccak256
+    #[test]
+    fn test_service_registered_event_signature() {
+        use alloy_sol_types::SolEvent;
+
+        let sig_hash = ServiceRegistered::SIGNATURE_HASH;
+        let expected = alloy_primitives::keccak256(
+            b"ServiceRegistered(bytes32,address,uint256)"
+        );
+        assert_eq!(sig_hash, expected, "ServiceRegistered event signature mismatch");
     }
 }

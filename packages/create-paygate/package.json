@@ -1,0 +1,25 @@
+{
+  "name": "create-paygate",
+  "version": "0.1.0",
+  "description": "Scaffold a PayGate-wrapped API in 60 seconds",
+  "bin": {
+    "create-paygate": "dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "prompts": "^2.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.4",
+    "vitest": "^1.3",
+    "@types/prompts": "^2.4",
+    "@types/node": "^20"
+  },
+  "keywords": ["paygate", "api", "micropayments", "tempo", "blockchain"],
+  "license": "MIT"
+}
