@@ -1,6 +1,5 @@
 use paygate_common::types::{BaseUnits, PaymentRecord, Quote};
 use rusqlite::{Connection, params};
-use std::path::Path;
 use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{error, info, warn};
@@ -13,6 +12,17 @@ pub enum DbError {
     ChannelClosed,
     #[error("writer channel full — backpressure (503)")]
     Backpressure,
+}
+
+/// Active session info for CLI display.
+#[derive(Debug, Clone)]
+pub struct SessionRecord {
+    pub id: String,
+    pub payer_address: String,
+    pub balance: u64,
+    pub rate_per_request: u64,
+    pub requests_made: u64,
+    pub expires_at: i64,
 }
 
 /// Commands sent to the single-writer task via bounded mpsc channel.
@@ -154,6 +164,44 @@ impl DbReader {
                 row.get::<_, i64>(1)? as BaseUnits,
                 row.get::<_, i64>(2)? as u64,
             ))
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    /// Count active sessions.
+    pub fn active_session_count(&self) -> Result<u64, DbError> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().timestamp();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sessions WHERE status = 'active' AND expires_at > ?",
+            params![now],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
+
+    /// List active sessions.
+    pub fn list_active_sessions(&self) -> Result<Vec<SessionRecord>, DbError> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().timestamp();
+        let mut stmt = conn.prepare(
+            "SELECT id, payer_address, balance, rate_per_request, requests_made, expires_at
+             FROM sessions WHERE status = 'active' AND expires_at > ?
+             ORDER BY expires_at ASC",
+        )?;
+        let rows = stmt.query_map(params![now], |row| {
+            Ok(SessionRecord {
+                id: row.get(0)?,
+                payer_address: row.get(1)?,
+                balance: row.get::<_, i64>(2)? as u64,
+                rate_per_request: row.get::<_, i64>(3)? as u64,
+                requests_made: row.get::<_, i64>(4)? as u64,
+                expires_at: row.get(5)?,
+            })
         })?;
         let mut result = Vec::new();
         for row in rows {
@@ -430,11 +478,12 @@ pub async fn cleanup_task(reader: DbReader, retention_days: u32) {
             // Clean up old request logs (batched to avoid blocking)
             let log_cutoff = now - (retention_days as i64 * 86400);
             loop {
-                match conn.execute(
+                let deleted = conn.execute(
                     "DELETE FROM request_log WHERE rowid IN
-                     (SELECT rowid FROM request_log WHERE created_at < ? LIMIT 5000)",
-                    params![log_cutoff],
-                ) {
+                     (SELECT rowid FROM request_log WHERE created_at < ?1 LIMIT 5000)",
+                    [log_cutoff],
+                );
+                match deleted {
                     Ok(n) if n > 0 => {
                         info!("Cleaned up {n} old request log entries");
                         if n < 5000 {

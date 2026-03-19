@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::db::{DbReader, DbWriter};
+use metrics_exporter_prometheus::PrometheusHandle;
 use std::sync::Arc;
 use arc_swap::ArcSwap;
 
@@ -10,6 +11,8 @@ pub struct AppState {
     pub db_reader: DbReader,
     pub db_writer: DbWriter,
     pub http_client: reqwest::Client,
+    pub prometheus_handle: PrometheusHandle,
+    pub started_at: std::time::Instant,
 }
 
 impl AppState {
