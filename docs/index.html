@@ -4,14 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PayGate — The API marketplace where agents don't need API keys</title>
-  <meta name="description" content="Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.">
-  <meta property="og:title" content="PayGate — API marketplace for AI agents">
-  <meta property="og:description" content="Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.">
+  <meta name="description" content="Your agent finds a tool, pays $0.002, gets the answer. No API key. No signup. No human. Per-request stablecoin payments on Tempo.">
+  <meta property="og:title" content="PayGate — APIs that agents pay for themselves">
+  <meta property="og:description" content="Your agent finds a tool, pays $0.002, gets the answer. No API key. No signup. No human.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ssreeni1.github.io/paygate">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="PayGate — API marketplace for AI agents">
-  <meta name="twitter:description" content="Per-request stablecoin payments for APIs. No API keys. No human signup.">
+  <meta name="twitter:title" content="PayGate — APIs that agents pay for themselves">
+  <meta name="twitter:description" content="Agent finds tool. Agent pays $0.002. Agent gets answer. No API key. No human.">
   <link rel="stylesheet" href="style.css">
   <script defer data-domain="ssreeni1.github.io" src="https://plausible.io/js/script.js"></script>
 </head>
@@ -30,7 +30,7 @@
   <header class="dark">
     <div class="wrap">
       <h1>The API marketplace where<br>agents don't need API keys.</h1>
-      <p class="subtitle">Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.</p>
+      <p class="subtitle">Your agent needs a tool. It finds one, pays $0.002, and gets the answer. No API key. No signup. No human.</p>
       <div class="btn-group">
         <a href="https://paygate-demo-production.up.railway.app/v1/pricing" target="_blank" class="btn btn-primary">Try the Demo</a>
         <a href="#add-api" class="btn btn-secondary">Add Your API</a>
@@ -64,9 +64,9 @@
   <!-- 2. Available APIs -->
   <section class="fade-in">
     <div class="wrap">
-      <h2>Available APIs</h2>
+      <h2>Live on testnet right now</h2>
       <div class="demo-banner">
-        These APIs are running in demo mode with simulated responses. Payments are verified on Tempo Moderato testnet. Deploy your own with real upstreams using <code>npx create-paygate</code>.
+        Demo mode — mock responses, real payments. Every 402 hits the Tempo blockchain. Deploy your own with <code>npx create-paygate</code>.
       </div>
       <div class="api-grid">
 
@@ -125,8 +125,8 @@
   <!-- 3. Add Your API -->
   <section id="add-api" class="dark fade-in">
     <div class="wrap">
-      <h2>Add your API to the marketplace</h2>
-      <p class="subtitle">Three commands. Sixty seconds. Real payments.</p>
+      <h2>You have an API. Get paid per request.</h2>
+      <p class="subtitle">Three commands. Your API earns money from every agent that calls it.</p>
       <div class="terminal" style="margin-top:1.5rem">
         <div class="terminal-bar">
           <span class="terminal-dot red"></span>
@@ -138,9 +138,9 @@
 <span class="prompt">$</span> npm start</code></pre>
       </div>
       <ul class="feature-list">
-        <li><code>paygate.toml</code> configures pricing and your wallet address</li>
-        <li><code>Dockerfile</code> included for fly.io, Railway, or any container host</li>
-        <li>PayGate handles payments, verification, and proxying</li>
+        <li>Set your price. Set your wallet. That's the config.</li>
+        <li>Deploy anywhere — fly.io, Railway, any Docker host.</li>
+        <li>PayGate handles the rest: payments, verification, proxying.</li>
       </ul>
     </div>
   </section>
@@ -148,8 +148,8 @@
   <!-- 4. For Agent Developers -->
   <section class="fade-in">
     <div class="wrap">
-      <h2>For agent developers</h2>
-      <p>One SDK. Automatic payment negotiation. Your agent handles 402s without human intervention.</p>
+      <h2>Your agent pays for itself</h2>
+      <p>It sees a 402, reads the price, pays on-chain, retries. You write zero payment code.</p>
       <div class="code-block" style="margin-top:1rem">
         <pre><code>import { PayGateClient } from '@paygate/sdk';
 
@@ -170,7 +170,7 @@ const result = await client.fetch(
   <!-- 5. Built on Tempo -->
   <div class="tempo-bar">
     <div class="wrap">
-      Built on <a href="https://tempo.xyz">Tempo</a> — sub-second finality, stablecoin-native, Stripe-backed.
+      Payments settle in under a second on <a href="https://tempo.xyz">Tempo</a> — the Stripe-backed blockchain built for money.
     </div>
   </div>
 
