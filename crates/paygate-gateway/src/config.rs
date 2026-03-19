@@ -60,7 +60,7 @@ pub struct TempoConfig {
     pub rpc_pool_max_idle: usize,
     #[serde(default = "default_rpc_timeout")]
     pub rpc_timeout_ms: u64,
-    #[serde(default)]
+    #[serde(default = "default_chain_id")]
     pub chain_id: u64,
     #[serde(default = "default_private_key_env")]
     pub private_key_env: String,
@@ -230,6 +230,7 @@ fn default_network() -> String { "testnet".to_string() }
 fn default_failover_timeout() -> u64 { 2000 }
 fn default_rpc_pool_max_idle() -> usize { 10 }
 fn default_rpc_timeout() -> u64 { 5000 }
+fn default_chain_id() -> u64 { 4217 }
 fn default_private_key_env() -> String { "PAYGATE_PRIVATE_KEY".to_string() }
 fn default_sponsor_listen() -> String { "/paygate/sponsor".to_string() }
 fn default_true() -> bool { true }
@@ -405,7 +406,7 @@ mod tests {
 upstream = "http://localhost:3000"
 
 [tempo]
-rpc_urls = ["https://rpc.tempo.xyz"]
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
 
 [provider]
 address = "0x7F3a000000000000000000000000000000000001"
@@ -422,7 +423,7 @@ address = "0x7F3a000000000000000000000000000000000001"
 [gateway]
 upstream = "http://localhost:3000"
 [tempo]
-rpc_urls = ["https://rpc.tempo.xyz"]
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
 [provider]
 address = "not-an-address"
 "#;
@@ -458,7 +459,7 @@ address = "not-an-address"
 [gateway]
 upstream = "http://localhost:3000"
 [tempo]
-rpc_urls = ["https://rpc.tempo.xyz"]
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
 [provider]
 address = "0x7F3a000000000000000000000000000000000001"
 [pricing]

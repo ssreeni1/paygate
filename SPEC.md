@@ -244,11 +244,11 @@ max_response_body_bytes = 10485760       # 10MB — response body size limit (pr
 
 [tempo]
 network = "testnet"                      # "testnet" or "mainnet" — controls chain defaults
-rpc_urls = ["https://rpc.tempo.xyz", "https://rpc2.tempo.xyz"]  # failover list
+rpc_urls = ["https://rpc.presto.tempo.xyz"]  # failover list
 failover_timeout_ms = 2000               # switch to next RPC URL after this timeout
 rpc_pool_max_idle = 10                   # HTTP connection pool size for RPC
 rpc_timeout_ms = 5000                    # per-request timeout for RPC calls
-chain_id = 0                             # PLACEHOLDER — verify from viem/chains
+chain_id = 4217                          # Tempo mainnet
 private_key_env = "PAYGATE_PRIVATE_KEY"  # env var, never in config
 # MVP: exactly one accepted token. Multi-token with FX rules deferred to v0.2.
 accepted_token = "0x...USDC"             # TIP-20 token address (mainnet TBD)
@@ -322,7 +322,7 @@ request_log_retention_days = 30          # TTL for request_log entries
 upstream = "http://localhost:3000"
 
 [tempo]
-rpc_urls = ["https://rpc.tempo.xyz"]
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
 
 [provider]
 address = "0x7F3a...Provider"
