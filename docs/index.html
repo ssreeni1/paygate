@@ -203,5 +203,33 @@ const result = await client.fetch(
     document.querySelectorAll('.fade-in, .api-card, .stats-section').forEach(el => observer.observe(el));
   </script>
 
+  <script>
+    document.querySelectorAll('.code-block, .terminal').forEach(block => {
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.textContent = 'Copy';
+      btn.addEventListener('click', () => {
+        const code = block.querySelector('code');
+        if (code) {
+          navigator.clipboard.writeText(code.textContent).then(() => {
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(() => {
+              btn.textContent = 'Copy';
+              btn.classList.remove('copied');
+            }, 2000);
+          });
+        }
+      });
+      // For terminals, insert after the terminal-bar
+      const bar = block.querySelector('.terminal-bar');
+      if (bar) {
+        bar.after(btn);
+      } else {
+        block.appendChild(btn);
+      }
+    });
+  </script>
+
 </body>
 </html>
