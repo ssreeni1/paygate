@@ -268,10 +268,10 @@ async fn cmd_serve(config_path: &str) {
 
     if !rpc_ok {
         eprintln!();
-        eprintln!("  error: Tempo RPC unreachable");
+        eprintln!("  warning: Tempo RPC unreachable at startup");
         eprintln!("    rpc_url = \"{}\"", config.tempo.rpc_urls.first().unwrap_or(&String::new()));
-        eprintln!("    hint: check your network or verify the URL in paygate.toml");
-        std::process::exit(1);
+        eprintln!("    hint: payment verification will fail until RPC is reachable");
+        // Don't exit — start the server anyway. Payments will return 503 but free endpoints work.
     }
 
     eprintln!(
