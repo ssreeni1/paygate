@@ -1,0 +1,27 @@
+[gateway]
+listen = "127.0.0.1:18080"
+admin_listen = "127.0.0.1:18081"
+upstream = "http://127.0.0.1:9999"
+upstream_timeout_seconds = 10
+
+[tempo]
+network = "testnet"
+rpc_urls = ["https://rpc.moderato.tempo.xyz"]
+chain_id = 42431
+accepted_token = "0x20c0000000000000000000000000000000000000"
+
+[provider]
+address = "0x002925FAFE98cfeB9fdBb7d6045ce318E4BD4b88"
+name = "E2E Testnet API"
+
+[pricing]
+default_price = "0.001"
+quote_ttl_seconds = 300
+
+[pricing.endpoints]
+"GET /v1/models" = "0.000"
+"POST /v1/chat/completions" = "0.001"
+
+[rate_limiting]
+requests_per_second = 100
+per_payer_per_second = 10

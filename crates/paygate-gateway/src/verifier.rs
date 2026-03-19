@@ -151,6 +151,18 @@ pub(crate) fn decode_transfer_events(
 }
 
 /// Decode TransferWithMemo log to extract memo bytes32.
+///
+/// TransferWithMemo event signature:
+///   event TransferWithMemo(address indexed from, address indexed to, uint256 value, bytes32 indexed memo)
+///
+/// Topics layout:
+///   topics[0] = event signature hash
+///   topics[1] = from (indexed)
+///   topics[2] = to (indexed)
+///   topics[3] = memo (indexed) ← the memo is here, NOT in data
+///
+/// Data layout:
+///   data = abi.encode(uint256 value)
 pub(crate) fn decode_memo_from_logs(logs: &[Value]) -> Result<B256, VerificationResult> {
     let sig = transfer_with_memo_sig();
 
@@ -167,17 +179,21 @@ pub(crate) fn decode_memo_from_logs(logs: &[Value]) -> Result<B256, Verification
             continue;
         }
 
-        let data = match log.get("data").and_then(|d| d.as_str()).and_then(parse_hex) {
-            Some(d) => d,
-            None => continue,
-        };
-        // data = abi.encode(uint256 amount, bytes32 memo) = 64 bytes
-        if data.len() < 64 {
+        // memo is indexed → topics[3]
+        if topics.len() < 4 {
             return Err(VerificationResult::InvalidTransfer(
-                "memo data too short".into(),
+                "TransferWithMemo log missing memo topic (expected 4 topics)".into(),
             ));
         }
-        return Ok(B256::from_slice(&data[32..64]));
+        let memo = match parse_b256(topics.get(3)) {
+            Some(m) => m,
+            None => {
+                return Err(VerificationResult::InvalidTransfer(
+                    "failed to parse memo from topics[3]".into(),
+                ));
+            }
+        };
+        return Ok(memo);
     }
 
     Err(VerificationResult::InvalidTransfer(
@@ -513,7 +529,7 @@ mod tests {
         let from_topic = format!("0x{from_hex:0>64}");
         let to_topic = format!("0x{to_hex:0>64}");
         let amount_data = format!("0x{amount:064x}");
-        let memo_data = format!("0x{amount:064x}{}", hex::encode(memo.as_slice()));
+        let memo_topic = format!("0x{}", hex::encode(memo.as_slice()));
 
         vec![
             json!({
@@ -523,8 +539,9 @@ mod tests {
             }),
             json!({
                 "address": token,
-                "topics": [format!("0x{}", hex::encode(msig)), from_topic, to_topic],
-                "data": memo_data
+                // memo is indexed → topics[3], data only has amount
+                "topics": [format!("0x{}", hex::encode(msig)), from_topic, to_topic, memo_topic],
+                "data": amount_data
             }),
         ]
     }
