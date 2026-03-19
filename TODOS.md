@@ -18,13 +18,21 @@
 - **Context:** The 402 JSON body format was finalized in the design review (DESIGN-REVIEW.md §4). The page should cover: what 402 means, how to send a TIP-20 payment, how to retry with X-Payment-Tx header, and how to use the SDK for auto-pay.
 - **Depends on:** Finalized 402 response format (done), working payment flow.
 
-### Verify Tempo SDK APIs before implementation
-- **What:** Confirm all `viem/tempo` exports referenced in SPEC.md actually exist: `Account.fromSecp256k1`, `tempoActions()`, `withFeePayer`, TIP-20 event ABIs, `tempo_fundAddress` RPC method. Update spec if any differ.
-- **Why:** The spec was generated from pre-launch docs by an agent. APIs may have changed at launch. Building against wrong APIs wastes implementation time.
-- **Pros:** Prevents rework; catches API mismatches before coding starts.
-- **Cons:** None — this is a prerequisite.
-- **Context:** Tempo mainnet launched 2026-03-18. Check actual `viem/tempo` package exports, `viem/chains` for `tempoTestnet`/`tempoMainnet`, and Tempo docs for RPC methods.
+### Verify Tempo SDK APIs before testnet integration
+- **What:** Confirm all `viem/tempo` exports referenced in SPEC.md and the TypeScript SDK actually exist: `Account.fromSecp256k1`, `tempoActions()`, `withFeePayer`, TIP-20 event ABIs, `tempo_fundAddress` RPC method. Update code if any differ.
+- **Why:** The SDK was built against pre-launch API docs. Actual exports may differ. The `paygate test` and `paygate demo` commands depend on these APIs working.
+- **Pros:** Prevents runtime failures on first testnet run.
+- **Cons:** None — this is a prerequisite for testnet integration.
+- **Context:** Tempo mainnet launched 2026-03-18. The TS SDK (`sdk/src/client.ts`) imports from `viem/tempo` and `viem/chains`. Gateway RPC calls in `verifier.rs` use standard `eth_getTransactionReceipt`. Check actual package exports against code imports.
 - **Depends on:** Nothing — can be done immediately.
+
+### Deploy docs site for help_url
+- **What:** Set up `docs.paygate.dev` (GitHub Pages or Vercel) and publish the quickstart page. The quickstart content is partially covered by README.md now, but the `help_url` in 402 responses points to `https://docs.paygate.dev/quickstart#paying` which must be a live URL.
+- **Why:** Every 402 response links to this URL. Dead links at the moment a developer needs help is a terrible first impression.
+- **Pros:** Completes the DX loop from 402 → docs → payment → success.
+- **Cons:** Requires DNS setup and a deployment pipeline (minimal with GitHub Pages).
+- **Context:** README.md now has the "How it works" and SDK sections that can be adapted for the quickstart page. The 402 JSON format is finalized in DESIGN-REVIEW.md §4.
+- **Depends on:** Quickstart documentation (above).
 
 ## Non-blocking
 
