@@ -46,14 +46,19 @@ describe('POST /v1/scrape', () => {
     expect(res.status).toBe(400);
   });
 
-  it('returns 500 when browser not initialized', async () => {
+  it('returns mock content when browser not initialized', async () => {
     // The browser isn't initialized in test mode (no initBrowser() call),
-    // so this should return an error
+    // so this should return mock content
     const res = await request(app)
       .post('/v1/scrape')
       .send({ url: 'https://example.com' });
 
-    // Browser is null in test mode, should get 500
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
+    expect(res.body.title).toContain('example.com');
+    expect(res.body.content).toBeTruthy();
+    expect(res.body.url).toBe('https://example.com');
+    expect(res.body._demo).toBe(true);
+    expect(res.body._mock).toBe(true);
+    expect(res.body._note).toContain('Playwright');
   });
 });

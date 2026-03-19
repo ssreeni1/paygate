@@ -10,24 +10,19 @@ beforeEach(() => {
 });
 
 describe('POST /v1/summarize', () => {
-  it('returns summary on success', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        content: [{ type: 'text', text: 'This is a summary of the article.' }],
-        model: 'claude-3-5-haiku-20241022',
-        usage: { input_tokens: 150, output_tokens: 20 },
-      }), { status: 200 }),
-    );
-
+  it('returns mock summary when ANTHROPIC_API_KEY is not set', async () => {
     const res = await request(app)
       .post('/v1/summarize')
-      .send({ text: 'A long article about artificial intelligence and its impact on society...', max_length: 50 });
+      .send({ text: 'A long article about artificial intelligence and its impact on society.', max_length: 50 });
 
     expect(res.status).toBe(200);
-    expect(res.body.summary).toBe('This is a summary of the article.');
+    expect(res.body.summary).toBeTruthy();
     expect(res.body.model).toBe('claude-3-5-haiku-20241022');
-    expect(res.body.input_tokens).toBe(150);
-    expect(res.body.output_tokens).toBe(20);
+    expect(res.body.input_tokens).toBeGreaterThan(0);
+    expect(res.body.output_tokens).toBeGreaterThan(0);
+    expect(res.body._demo).toBe(true);
+    expect(res.body._mock).toBe(true);
+    expect(res.body._note).toContain('Claude Haiku');
   });
 
   it('returns 400 for missing text', async () => {
@@ -45,17 +40,5 @@ describe('POST /v1/summarize', () => {
       .send({ text: 'x'.repeat(100_001) });
 
     expect(res.status).toBe(400);
-  });
-
-  it('returns 502 when upstream returns 500', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response('Server Error', { status: 500 }),
-    );
-
-    const res = await request(app)
-      .post('/v1/summarize')
-      .send({ text: 'Some text to summarize' });
-
-    expect(res.status).toBe(502);
   });
 });

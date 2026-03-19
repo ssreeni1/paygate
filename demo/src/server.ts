@@ -2,24 +2,9 @@ import express from 'express';
 import { errorHandler } from './lib/errors.js';
 import pricingRouter from './routes/pricing.js';
 import searchRouter from './routes/search.js';
-import scrapeRouter, { initBrowser, closeBrowser } from './routes/scrape.js';
+import scrapeRouter, { initBrowser, closeBrowser, isBrowserAvailable } from './routes/scrape.js';
 import imageRouter from './routes/image.js';
 import summarizeRouter from './routes/summarize.js';
-
-// Check required environment variables
-const REQUIRED_ENV = [
-  { key: 'BRAVE_API_KEY', hint: 'get a free API key at https://brave.com/search/api/' },
-  { key: 'REPLICATE_API_TOKEN', hint: 'get a token at https://replicate.com/account/api-tokens' },
-  { key: 'ANTHROPIC_API_KEY', hint: 'get a key at https://console.anthropic.com/' },
-];
-
-for (const { key, hint } of REQUIRED_ENV) {
-  if (!process.env[key]) {
-    console.error(`error: missing required environment variable: ${key}`);
-    console.error(`  hint: ${hint}`);
-    process.exit(1);
-  }
-}
 
 const PORT = Number(process.env.PORT) || 3001;
 
@@ -45,9 +30,20 @@ if (isDirectRun) {
     await initBrowser();
 
     const server = app.listen(PORT, () => {
-      console.log(`  PayGate Demo Server v0.1.0`);
+      const searchMode = process.env.BRAVE_API_KEY ? 'LIVE (Brave Search)' : 'MOCK (set BRAVE_API_KEY for live)';
+      const scrapeMode = isBrowserAvailable() ? 'LIVE (Playwright)' : 'MOCK (install Playwright for live)';
+      const imageMode = process.env.REPLICATE_API_TOKEN ? 'LIVE (Replicate SDXL)' : 'MOCK (set REPLICATE_API_TOKEN for live)';
+      const summarizeMode = process.env.ANTHROPIC_API_KEY ? 'LIVE (Claude Haiku)' : 'MOCK (set ANTHROPIC_API_KEY for live)';
+
+      console.log('');
+      console.log('  PayGate Demo Server');
+      console.log(`    Search:    ${searchMode}`);
+      console.log(`    Scrape:    ${scrapeMode}`);
+      console.log(`    Image:     ${imageMode}`);
+      console.log(`    Summarize: ${summarizeMode}`);
+      console.log('');
       console.log(`  Listening on :${PORT}`);
-      console.log(`  Endpoints: /v1/pricing, /v1/search, /v1/scrape, /v1/image, /v1/summarize`);
+      console.log('  Endpoints: /v1/pricing, /v1/search, /v1/scrape, /v1/image, /v1/summarize');
     });
 
     const shutdown = async () => {

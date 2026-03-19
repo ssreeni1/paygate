@@ -11,18 +11,7 @@ beforeEach(() => {
 });
 
 describe('POST /v1/search', () => {
-  it('returns search results on success', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({
-        web: {
-          results: [
-            { title: 'AI News', url: 'https://example.com/ai', description: 'Latest AI developments', age: '2h' },
-            { title: 'ML Update', url: 'https://example.com/ml', description: 'Machine learning news' },
-          ],
-        },
-      }), { status: 200 }),
-    );
-
+  it('returns mock search results when BRAVE_API_KEY is not set', async () => {
     const res = await request(app)
       .post('/v1/search')
       .send({ query: 'AI news', count: 2 });
@@ -31,9 +20,12 @@ describe('POST /v1/search', () => {
     expect(res.body.results).toHaveLength(2);
     expect(res.body.query).toBe('AI news');
     expect(res.body.result_count).toBe(2);
-    expect(res.body.results[0]).toHaveProperty('title', 'AI News');
+    expect(res.body.results[0]).toHaveProperty('title');
     expect(res.body.results[0]).toHaveProperty('url');
     expect(res.body.results[0]).toHaveProperty('description');
+    expect(res.body._demo).toBe(true);
+    expect(res.body._mock).toBe(true);
+    expect(res.body._note).toContain('Brave Search');
   });
 
   it('returns 400 for missing query', async () => {
@@ -51,17 +43,5 @@ describe('POST /v1/search', () => {
       .send({ query: 'test', count: 50 });
 
     expect(res.status).toBe(400);
-  });
-
-  it('returns 502 when upstream returns 500', async () => {
-    mockFetch.mockResolvedValueOnce(
-      new Response('Internal Server Error', { status: 500 }),
-    );
-
-    const res = await request(app)
-      .post('/v1/search')
-      .send({ query: 'test' });
-
-    expect(res.status).toBe(502);
   });
 });

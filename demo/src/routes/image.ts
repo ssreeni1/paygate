@@ -14,6 +14,23 @@ router.post('/v1/image', async (req, res, next) => {
     const width = optionalNumber(req.body?.width, 'width', 1024, 256, 2048);
     const height = optionalNumber(req.body?.height, 'height', 1024, 256, 2048);
 
+    // Mock mode when REPLICATE_API_TOKEN is not set
+    if (!REPLICATE_API_TOKEN) {
+      const encodedPrompt = encodeURIComponent(prompt.slice(0, 60));
+      const imageUrl = `https://placehold.co/${width}x${height}/2d3748/e2e8f0?text=${encodedPrompt}`;
+      console.log(`[image] prompt="${prompt.slice(0, 40)}..." mode=MOCK status=200`);
+      res.json({
+        image_url: imageUrl,
+        prompt,
+        model: 'sdxl',
+        generation_time_ms: 0,
+        _demo: true,
+        _mock: true,
+        _note: 'This is a demo response. In production, this endpoint returns real data from Replicate.',
+      });
+      return;
+    }
+
     const start = Date.now();
 
     // Create prediction

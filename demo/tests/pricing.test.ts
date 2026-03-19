@@ -24,6 +24,14 @@ describe('GET /v1/pricing', () => {
       expect(api).toHaveProperty('description');
       expect(api).toHaveProperty('example_request');
       expect(api).toHaveProperty('example_response_fields');
+      expect(api).toHaveProperty('mode');
     }
+  });
+
+  it('includes demo mode metadata', async () => {
+    const res = await request(app).get('/v1/pricing');
+    expect(res.body).toHaveProperty('_demo_mode');
+    expect(res.body).toHaveProperty('_note');
+    expect(res.body._note).toContain('npx create-paygate');
   });
 });

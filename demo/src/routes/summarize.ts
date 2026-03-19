@@ -6,10 +6,43 @@ const router = Router();
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? '';
 
+function generateMockSummary(text: string, maxLength: number): string {
+  // Extract first few sentences to create a realistic-looking summary
+  const sentences = text.match(/[^.!?]+[.!?]+/g) ?? [];
+  const firstFew = sentences.slice(0, 3).join(' ').trim();
+
+  if (firstFew.length > 20) {
+    // Build summary from actual input to feel realistic
+    const words = firstFew.split(/\s+/).slice(0, maxLength);
+    return `The text discusses ${words.slice(0, 5).join(' ').toLowerCase().replace(/[^a-z0-9\s]/g, '')}. ${words.length > 10 ? 'Key points include the main themes presented in the content, along with supporting details and relevant context.' : 'The content provides a brief overview of the topic.'} This summary captures the essential information from the provided text.`;
+  }
+
+  return 'The provided text covers several key topics. The main points relate to the subject matter discussed, with supporting details and context. The content presents a clear overview that can be referenced for the essential takeaways.';
+}
+
 router.post('/v1/summarize', async (req, res, next) => {
   try {
     const text = requireStringMaxLength(req.body?.text, 'text', 100_000);
     const maxLength = optionalNumber(req.body?.max_length, 'max_length', 200, 10, 2000);
+
+    // Mock mode when ANTHROPIC_API_KEY is not set
+    if (!ANTHROPIC_API_KEY) {
+      const summary = generateMockSummary(text, maxLength);
+      const inputTokens = Math.ceil(text.length / 4); // rough approximation
+      const outputTokens = Math.ceil(summary.length / 4);
+
+      console.log(`[summarize] input_chars=${text.length} mode=MOCK status=200`);
+      res.json({
+        summary,
+        model: 'claude-3-5-haiku-20241022',
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        _demo: true,
+        _mock: true,
+        _note: 'This is a demo response. In production, this endpoint returns real data from Claude Haiku.',
+      });
+      return;
+    }
 
     const start = Date.now();
 
