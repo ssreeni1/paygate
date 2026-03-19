@@ -31,10 +31,6 @@
     <div class="wrap">
       <h1>The API marketplace where<br>agents don't need API keys.</h1>
       <p class="subtitle">Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.</p>
-      <div class="tempo-badge">
-        &#10003; Verified on Tempo testnet &mdash;
-        <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view transaction</a>
-      </div>
       <div class="btn-group">
         <a href="quickstart.html" class="btn btn-primary">Try the Demo</a>
         <a href="#add-api" class="btn btn-secondary">Add Your API</a>
@@ -56,14 +52,14 @@
     -d '{"query": "AI news"}'
 
 <span class="status-200">200 OK</span>
-{"results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}]}</code></pre>
+{"results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}]}<span class="cursor"></span></code></pre>
       </div>
       <p class="terminal-caption" style="text-align:left;">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
     </div>
   </header>
 
   <!-- 2. Available APIs -->
-  <section>
+  <section class="fade-in">
     <div class="wrap">
       <h2>Available APIs</h2>
       <div class="demo-banner">
@@ -124,7 +120,7 @@
   </section>
 
   <!-- 3. Add Your API -->
-  <section id="add-api" class="dark">
+  <section id="add-api" class="dark fade-in">
     <div class="wrap">
       <h2>Add your API to the marketplace</h2>
       <p class="subtitle">Three commands. Sixty seconds. Real payments.</p>
@@ -147,7 +143,7 @@
   </section>
 
   <!-- 4. For Agent Developers -->
-  <section>
+  <section class="fade-in">
     <div class="wrap">
       <h2>For agent developers</h2>
       <p>One SDK. Automatic payment negotiation. Your agent handles 402s without human intervention.</p>
@@ -191,6 +187,13 @@ const result = await client.fetch(
       </div>
     </div>
   </footer>
+
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-in, .api-card').forEach(el => observer.observe(el));
+  </script>
 
 </body>
 </html>
