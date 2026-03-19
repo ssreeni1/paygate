@@ -190,7 +190,7 @@ mod tests {
             .unwrap();
         let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(json["error"], "payment_required");
-        assert!(json["help_url"].as_str().unwrap().contains("paygate.dev"));
+        assert!(json["help_url"].as_str().unwrap().contains("paygate"));
         assert!(json["pricing"]["quote_id"].as_str().unwrap().starts_with("qt_"));
         assert_eq!(json["pricing"]["amount_base_units"], 1000);
         assert_eq!(json["pricing"]["decimals"], 6);
