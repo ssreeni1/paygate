@@ -34,3 +34,4 @@ chrono = { version = "0.4", features = ["serde"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["full"] }
 http-body-util = "0.1"
+k256 = { version = "0.13", features = ["ecdsa"] }
