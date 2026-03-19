@@ -2,18 +2,18 @@
 # Builds Rust gateway + Node.js demo server in a single container
 
 # Stage 1: Build PayGate binary
-FROM rust:1.85-slim AS paygate-build
+FROM rust:1.85 AS paygate-build
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /build
-COPY Cargo.toml ./
+COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
-# Create a dummy schema.sql for the build
 COPY schema.sql .
 RUN cargo build --release -p paygate-gateway
 
 # Stage 2: Build demo server
 FROM node:20-slim AS demo-build
 WORKDIR /app
-COPY demo/package.json ./
+COPY demo/package.json demo/package-lock.json* ./
 RUN npm install
 COPY demo/tsconfig.json ./
 COPY demo/src/ src/
