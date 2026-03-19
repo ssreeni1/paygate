@@ -68,17 +68,26 @@ pub async fn forward_request(
         .timeout(timeout);
 
     for (name, value) in &parts.headers {
+        // Skip hop-by-hop headers and Host (reqwest sets Host from the URL)
+        if name == "host" || name == "transfer-encoding" || name == "connection" {
+            continue;
+        }
         req_builder = req_builder.header(name.clone(), value.clone());
     }
     req_builder = req_builder.body(body_bytes.to_vec());
 
+    tracing::info!(url = %upstream_url, method = %parts.method, "proxying request to upstream");
     let upstream_resp = match req_builder.send().await {
-        Ok(r) => r,
+        Ok(r) => {
+            tracing::info!(status = %r.status(), "upstream responded");
+            r
+        }
         Err(e) if e.is_timeout() => {
             metrics::record_upstream_duration(endpoint, 504, start.elapsed().as_secs_f64());
             return Err(ProxyError::Timeout);
         }
         Err(e) => {
+            tracing::error!(error = %e, "upstream connection error");
             metrics::record_upstream_duration(endpoint, 502, start.elapsed().as_secs_f64());
             return Err(ProxyError::Connection(e.to_string()));
         }
@@ -107,6 +116,10 @@ pub async fn forward_request(
     // 6. Build response with receipt headers
     let mut response = Response::builder().status(status);
     for (name, value) in &resp_headers {
+        // Skip hop-by-hop headers that don't apply to the rewritten response
+        if name == "transfer-encoding" || name == "connection" || name == "content-length" {
+            continue;
+        }
         response = response.header(name, value);
     }
 
