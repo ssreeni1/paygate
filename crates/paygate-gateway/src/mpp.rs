@@ -61,7 +61,7 @@ pub async fn payment_required_response(state: &AppState, endpoint: &str) -> Resp
     let body = json!({
         "error": "payment_required",
         "message": format!("Send {amount_str} USDC to {provider_addr} on Tempo, then retry with X-Payment-Tx header."),
-        "help_url": "https://docs.paygate.dev/quickstart#paying",
+        "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
         "pricing": {
             "amount": amount_str,
             "amount_base_units": price,

@@ -32,7 +32,7 @@ Verified in `crates/paygate-gateway/src/mpp.rs`:
 - All specified headers present: X-Payment-Required, X-Payment-Amount, X-Payment-Decimals, X-Payment-Token, X-Payment-Recipient, X-Payment-Network, X-Payment-Chain-Id, X-Payment-Quote-Id, X-Payment-Quote-Expires, X-Payment-Methods
 - JSON body includes: error, message, help_url, pricing object with all required fields
 - `message` field includes human-readable instruction
-- `help_url` points to docs.paygate.dev
+- `help_url` points to ssreeni1.github.io/paygate
 - Quote IDs generated and stored in DB
 - Unit test confirms format (mpp.rs test_402_response_format)
 

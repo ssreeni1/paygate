@@ -218,7 +218,7 @@ The 402 JSON body now includes `message` and `help_url` fields for developer deb
 {
   "error": "payment_required",
   "message": "Send 0.005000 USDC to 0x7F3a...Provider on Tempo, then retry with X-Payment-Tx header.",
-  "help_url": "https://docs.paygate.dev/quickstart#paying",
+  "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
   "pricing": {
     "amount": "0.005000",
     "amount_base_units": 5000,
@@ -270,7 +270,7 @@ Nothing — greenfield project. SPEC.md is the only artifact.
 
 ### 2. Quickstart Documentation for Payment Flow
 
-**What:** Write `docs.paygate.dev/quickstart#paying` — the page linked from every 402 response's `help_url`.
+**What:** Write `ssreeni1.github.io/paygate/quickstart#paying` — the page linked from every 402 response's `help_url`.
 **Why:** The `help_url` field in 402 responses is useless without actual docs. This is a pre-launch requirement for v0.1.
 **Depends on:** Finalized 402 response format, working payment flow.
 

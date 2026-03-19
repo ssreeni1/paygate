@@ -5,7 +5,7 @@ import type { PaymentParams } from '../src/types.js';
 const MOCK_402_BODY = {
   error: 'payment_required',
   message: 'Send 0.005000 USDC to 0x7F3aProvider on Tempo, then retry with X-Payment-Tx header.',
-  help_url: 'https://docs.paygate.dev/quickstart#paying',
+  help_url: 'https://ssreeni1.github.io/paygate/quickstart#paying',
   pricing: {
     amount: '0.005000',
     amount_base_units: 5000,

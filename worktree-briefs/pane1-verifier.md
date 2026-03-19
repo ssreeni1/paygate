@@ -118,7 +118,7 @@ pub struct PaymentHeaders {
 
 The 402 response MUST include:
 - All X-Payment-* response headers (from mpp constants)
-- JSON body with: `error: "payment_required"`, `message` (actionable, includes amount and provider address), `help_url: "https://docs.paygate.dev/quickstart#paying"`, `pricing` object
+- JSON body with: `error: "payment_required"`, `message` (actionable, includes amount and provider address), `help_url: "https://ssreeni1.github.io/paygate/quickstart#paying"`, `pricing` object
 - A new quote stored in DB with TTL from config.pricing.quote_ttl_seconds
 
 ### 3. `crates/paygate-gateway/src/rate_limit.rs`

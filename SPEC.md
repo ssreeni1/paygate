@@ -84,7 +84,7 @@ X-Payment-Methods: direct,session
 {
   "error": "payment_required",
   "message": "Send 0.001000 USDC to 0x...Provider on Tempo, then retry with X-Payment-Tx header.",
-  "help_url": "https://docs.paygate.dev/quickstart#paying",
+  "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
   "pricing": {
     "amount": "0.001000",
     "amount_base_units": 1000,
@@ -421,7 +421,7 @@ Uses the actual Tempo SDK (`viem/tempo`) for wallet and transaction management:
 import { PayGateClient } from '@paygate/sdk';
 import { createClient, http, publicActions, walletActions } from 'viem';
 import { Account, tempoActions } from 'viem/tempo';
-import { tempoTestnet } from 'viem/chains'; // or tempoMainnet when available
+import { tempoModerato } from 'viem/chains'; // testnet; use `tempo` for mainnet
 
 // Create a Tempo wallet using viem/tempo
 const account = Account.fromSecp256k1(process.env.TEMPO_PRIVATE_KEY!);

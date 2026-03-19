@@ -11,8 +11,8 @@
 - **Depends on:** Tempo mainnet documentation being published.
 
 ### Quickstart documentation for payment flow
-- **What:** Write the page at `docs.paygate.dev/quickstart#paying` — the URL linked from every 402 response's `help_url` field.
-- **Why:** Every 402 response includes `"help_url": "https://docs.paygate.dev/quickstart#paying"`. Without actual docs at that URL, developers hit a dead link at the exact moment they need help. This is a pre-launch requirement.
+- **What:** Write the page at `ssreeni1.github.io/paygate/quickstart#paying` — the URL linked from every 402 response's `help_url` field.
+- **Why:** Every 402 response includes `"help_url": "https://ssreeni1.github.io/paygate/quickstart#paying"`. Without actual docs at that URL, developers hit a dead link at the exact moment they need help. This is a pre-launch requirement.
 - **Pros:** Completes the DX loop; developers can self-serve from the 402 response.
 - **Cons:** Requires a docs site (GitHub Pages, Vercel, etc.) — minimal setup.
 - **Context:** The 402 JSON body format was finalized in the design review (DESIGN-REVIEW.md §4). The page should cover: what 402 means, how to send a TIP-20 payment, how to retry with X-Payment-Tx header, and how to use the SDK for auto-pay.
@@ -27,7 +27,7 @@
 - **Depends on:** Nothing — can be done immediately.
 
 ### Deploy docs site for help_url
-- **What:** Set up `docs.paygate.dev` (GitHub Pages or Vercel) and publish the quickstart page. The quickstart content is partially covered by README.md now, but the `help_url` in 402 responses points to `https://docs.paygate.dev/quickstart#paying` which must be a live URL.
+- **What:** Set up GitHub Pages at `ssreeni1.github.io/paygate` and publish the quickstart page. The quickstart content is partially covered by README.md now, but the `help_url` in 402 responses points to `https://ssreeni1.github.io/paygate/quickstart#paying` which must be a live URL.
 - **Why:** Every 402 response links to this URL. Dead links at the moment a developer needs help is a terrible first impression.
 - **Pros:** Completes the DX loop from 402 → docs → payment → success.
 - **Cons:** Requires DNS setup and a deployment pipeline (minimal with GitHub Pages).
