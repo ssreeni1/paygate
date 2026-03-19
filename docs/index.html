@@ -36,7 +36,7 @@
         <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view transaction</a>
       </div>
       <div class="btn-group">
-        <a href="#try-it" class="btn btn-primary">Try the Demo</a>
+        <a href="quickstart.html" class="btn btn-primary">Try the Demo</a>
         <a href="#add-api" class="btn btn-secondary">Add Your API</a>
       </div>
       <div class="terminal">
@@ -45,54 +45,24 @@
           <span class="terminal-dot yellow"></span>
           <span class="terminal-dot green"></span>
         </div>
-        <pre><code><span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
-    -H "Content-Type: application/json" \
-    -d '{"query": "latest AI news"}'
+        <pre><code><span class="prompt">$</span> curl -s -X POST .../v1/search -d '{"query": "AI news"}'
 
-<span class="status-402">HTTP/1.1 402 Payment Required</span>
-X-Payment-Amount: 2000
-X-Payment-Quote-Id: qt_a1b2c3d4
-{ "error": "payment_required", "pricing": { "amount": "0.002000" } }
+<span class="status-402">402 Payment Required</span>  — amount: 0.002 USDC
 
-<span class="comment"># Pay 0.002 USDC on Tempo...</span>
-<span class="comment"># Transaction confirmed: 0x668ac8...f452</span>
+<span class="comment"># Pay on Tempo, get tx hash 0x668ac8...f452</span>
 
-<span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
-    -H "Content-Type: application/json" \
+<span class="prompt">$</span> curl -s -X POST .../v1/search \
     -H "X-Payment-Tx: 0x668ac8...f452" \
-    -H "X-Payment-Payer: 0x748B3E...F9c0" \
-    -d '{"query": "latest AI news"}'
+    -d '{"query": "AI news"}'
 
-<span class="status-200">HTTP/1.1 200 OK</span>
-X-Payment-Receipt: 0x668ac8...f452
-X-Payment-Cost: 0.002000
-{ "results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}] }</code></pre>
+<span class="status-200">200 OK</span>
+{"results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}]}</code></pre>
       </div>
+      <p class="terminal-caption" style="text-align:left;">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
     </div>
   </header>
 
-  <!-- 2. Proof -->
-  <section>
-    <div class="wrap">
-      <p class="terminal-caption" style="text-align:center; font-size:1rem;">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
-    </div>
-  </section>
-
-  <!-- 3. Try It Now -->
-  <section id="try-it">
-    <div class="wrap">
-      <h2>Try it now</h2>
-      <p>The demo marketplace is live on Tempo testnet. Send a real request — see the 402 flow in action.</p>
-      <div class="code-block">
-        <pre><code>curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "latest AI news"}'</code></pre>
-      </div>
-      <p style="margin-top:0.5rem"><a href="quickstart.html">Read the quickstart guide</a> to complete the payment and get a 200 response.</p>
-    </div>
-  </section>
-
-  <!-- 4. Available APIs -->
+  <!-- 2. Available APIs -->
   <section>
     <div class="wrap">
       <h2>Available APIs</h2>
@@ -153,7 +123,7 @@ X-Payment-Cost: 0.002000
     </div>
   </section>
 
-  <!-- 5. Add Your API -->
+  <!-- 3. Add Your API -->
   <section id="add-api" class="dark">
     <div class="wrap">
       <h2>Add your API to the marketplace</h2>
@@ -169,14 +139,14 @@ X-Payment-Cost: 0.002000
 <span class="prompt">$</span> npm start</code></pre>
       </div>
       <ul class="feature-list">
-        <li><code>paygate.toml</code> — configure pricing and your wallet address</li>
-        <li><code>Dockerfile</code> — deploy to fly.io, railway, or any container host</li>
+        <li><code>paygate.toml</code> configures pricing and your wallet address</li>
+        <li><code>Dockerfile</code> included for fly.io, Railway, or any container host</li>
         <li>PayGate handles payments, verification, and proxying</li>
       </ul>
     </div>
   </section>
 
-  <!-- 6. For Agent Developers -->
+  <!-- 4. For Agent Developers -->
   <section>
     <div class="wrap">
       <h2>For agent developers</h2>
@@ -198,14 +168,14 @@ const result = await client.fetch(
     </div>
   </section>
 
-  <!-- 7. Built on Tempo -->
+  <!-- 5. Built on Tempo -->
   <div class="tempo-bar">
     <div class="wrap">
       Built on <a href="https://tempo.xyz">Tempo</a> — sub-second finality, stablecoin-native, Stripe-backed.
     </div>
   </div>
 
-  <!-- 8. Footer -->
+  <!-- 6. Footer -->
   <footer class="site-footer">
     <div class="wrap">
       <div class="footer-inner">
