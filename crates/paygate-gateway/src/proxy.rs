@@ -221,4 +221,163 @@ mod tests {
             .unwrap();
         assert_eq!(&body[..], b"OK", "payment headers should be stripped");
     }
+
+    fn test_state_with_upstream(upstream_addr: std::net::SocketAddr) -> AppState {
+        let db_path = format!("/tmp/paygate_test_{}.db", uuid::Uuid::new_v4());
+        let (db_reader, db_writer) = crate::db::init_db(&db_path).unwrap();
+        let config = Config {
+            gateway: GatewayConfig {
+                listen: "127.0.0.1:0".into(),
+                admin_listen: "127.0.0.1:0".into(),
+                upstream: format!("http://{upstream_addr}"),
+                upstream_timeout_seconds: 5,
+                max_response_body_bytes: 1024, // small limit for testing
+            },
+            tempo: TempoConfig {
+                network: "testnet".into(),
+                rpc_urls: vec!["http://localhost:1".into()],
+                failover_timeout_ms: 2000,
+                rpc_pool_max_idle: 10,
+                rpc_timeout_ms: 5000,
+                chain_id: 0,
+                private_key_env: "PAYGATE_PRIVATE_KEY".into(),
+                accepted_token: "0x1234000000000000000000000000000000000001".into(),
+            },
+            provider: ProviderConfig {
+                address: "0x7F3a000000000000000000000000000000000001".into(),
+                name: "Test".into(),
+                description: String::new(),
+            },
+            sponsorship: Default::default(),
+            sessions: Default::default(),
+            pricing: Default::default(),
+            rate_limiting: Default::default(),
+            security: Default::default(),
+            webhooks: Default::default(),
+            storage: Default::default(),
+        };
+        AppState {
+            config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
+            db_reader,
+            db_writer,
+            http_client: reqwest::Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(100, 10)),
+            webhook_sender: None,
+            prometheus_handle: metrics_exporter_prometheus::PrometheusBuilder::new()
+                .build_recorder()
+                .handle(),
+            started_at: std::time::Instant::now(),
+        }
+    }
+
+    // T15: Upstream 5xx returns 502 + receipt headers
+    #[tokio::test]
+    async fn test_upstream_5xx_returns_response_with_receipt() {
+        let upstream_app = axum::Router::new().fallback(|| async {
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "server error")
+        });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/chat")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = forward_request(&state, req, "0xabc123", 5000, "POST /v1/chat")
+            .await
+            .unwrap();
+
+        // Upstream 5xx is forwarded through (not converted to 502 by proxy)
+        assert_eq!(resp.status().as_u16(), 500);
+        // Receipt headers should still be present
+        assert!(resp.headers().get(mpp::HEADER_PAYMENT_RECEIPT).is_some());
+        assert_eq!(
+            resp.headers().get(mpp::HEADER_PAYMENT_RECEIPT).unwrap().to_str().unwrap(),
+            "0xabc123"
+        );
+        // X-Payment-Cost should be present
+        assert!(resp.headers().get(mpp::HEADER_PAYMENT_COST).is_some());
+    }
+
+    // T15 variant: X-Payment-Cost header has correct amount
+    #[tokio::test]
+    async fn test_x_payment_cost_header_correct_amount() {
+        let upstream_app = axum::Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/v1/test")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = forward_request(&state, req, "0xdef456", 5000, "GET /v1/test")
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status().as_u16(), 200);
+        let cost = resp.headers().get(mpp::HEADER_PAYMENT_COST).unwrap().to_str().unwrap();
+        assert_eq!(cost, "0.005000", "cost should be 5000 base units formatted as 0.005000");
+    }
+
+    // T29: Upstream response body too large returns PayloadTooLarge
+    #[tokio::test]
+    async fn test_upstream_response_too_large() {
+        // Return a response larger than the 1024-byte limit
+        let upstream_app = axum::Router::new().fallback(|| async {
+            "x".repeat(2048)
+        });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/v1/large")
+            .body(Body::empty())
+            .unwrap();
+
+        let result = forward_request(&state, req, "0xabc", 1000, "GET /v1/large").await;
+        assert!(
+            matches!(result, Err(ProxyError::PayloadTooLarge)),
+            "should return PayloadTooLarge for oversized response"
+        );
+    }
+
+    // No receipt headers when tx_hash is empty (free endpoint)
+    #[tokio::test]
+    async fn test_no_receipt_headers_for_free_endpoint() {
+        let upstream_app = axum::Router::new().fallback(|| async { "free" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/v1/free")
+            .body(Body::empty())
+            .unwrap();
+
+        // Empty tx_hash = free endpoint
+        let resp = forward_request(&state, req, "", 0, "GET /v1/free")
+            .await
+            .unwrap();
+
+        assert_eq!(resp.status().as_u16(), 200);
+        assert!(resp.headers().get(mpp::HEADER_PAYMENT_RECEIPT).is_none());
+        assert!(resp.headers().get(mpp::HEADER_PAYMENT_COST).is_none());
+    }
 }

@@ -1494,4 +1494,442 @@ mod tests {
             .unwrap();
         assert_eq!(&body[..], b"free endpoint response");
     }
+
+    /// Helper: create test state with upstream and optionally a mock RPC.
+    /// Returns (AppState, upstream_addr).
+    async fn test_state_with_upstream(
+        upstream_addr: std::net::SocketAddr,
+        webhook_url: Option<String>,
+    ) -> AppState {
+        let db_path = format!("/tmp/paygate_test_{}.db", uuid::Uuid::new_v4());
+        let (db_reader, db_writer) = crate::db::init_db(&db_path).unwrap();
+
+        let config = Config {
+            gateway: GatewayConfig {
+                listen: "127.0.0.1:0".into(),
+                admin_listen: "127.0.0.1:0".into(),
+                upstream: format!("http://{upstream_addr}"),
+                upstream_timeout_seconds: 5,
+                max_response_body_bytes: 10_485_760,
+            },
+            tempo: TempoConfig {
+                network: "testnet".into(),
+                rpc_urls: vec!["http://localhost:1".into()],
+                failover_timeout_ms: 2000,
+                rpc_pool_max_idle: 10,
+                rpc_timeout_ms: 5000,
+                chain_id: 0,
+                private_key_env: "PAYGATE_PRIVATE_KEY".into(),
+                accepted_token: "0x1234000000000000000000000000000000000001".into(),
+            },
+            provider: ProviderConfig {
+                address: "0x7F3a000000000000000000000000000000000001".into(),
+                name: "Test".into(),
+                description: String::new(),
+            },
+            sponsorship: Default::default(),
+            sessions: Default::default(),
+            pricing: PricingConfig {
+                default_price: "0.001".into(),
+                quote_ttl_seconds: 300,
+                endpoints: {
+                    let mut m = HashMap::new();
+                    m.insert("GET /v1/models".into(), "0.000".into());
+                    m
+                },
+                dynamic: Default::default(),
+                tiers: Default::default(),
+            },
+            rate_limiting: Default::default(),
+            security: Default::default(),
+            webhooks: Default::default(),
+            storage: Default::default(),
+        };
+
+        let webhook_sender = webhook_url.map(|url| {
+            crate::webhook::WebhookSender::new(reqwest::Client::new(), url, 5)
+        });
+
+        AppState {
+            config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
+            db_reader,
+            db_writer,
+            http_client: reqwest::Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(100, 10)),
+            webhook_sender,
+            prometheus_handle: metrics_exporter_prometheus::PrometheusBuilder::new()
+                .build_recorder()
+                .handle(),
+            started_at: std::time::Instant::now(),
+        }
+    }
+
+    // T18: Health endpoint returns correct JSON for healthy state
+    #[tokio::test]
+    async fn test_health_endpoint_healthy() {
+        // Start mock upstream
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        // Start mock RPC
+        let rpc_app = Router::new().fallback(|| async {
+            Json(json!({"jsonrpc":"2.0","result":"0x1","id":1}))
+        });
+        let rpc_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rpc_addr = rpc_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(rpc_listener, rpc_app).into_future());
+
+        let mut state = test_state_with_upstream(upstream_addr, None).await;
+        // Override RPC URLs to point to our mock
+        {
+            let mut config = (*state.current_config()).clone();
+            config.tempo.rpc_urls = vec![format!("http://{rpc_addr}")];
+            state.config.store(Arc::new(config));
+        }
+
+        let admin_app = crate::admin::admin_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/paygate/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = admin_app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["status"], "healthy");
+        assert_eq!(body["db"], "ok");
+        assert_eq!(body["tempo_rpc"], "connected");
+        assert_eq!(body["upstream"], "reachable");
+    }
+
+    // T18: Health endpoint returns degraded when RPC is unreachable
+    #[tokio::test]
+    async fn test_health_endpoint_degraded() {
+        // Start mock upstream
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        // No RPC server — rpc_urls points to unreachable addr
+        let state = test_state_with_upstream(upstream_addr, None).await;
+
+        let admin_app = crate::admin::admin_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/paygate/health")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = admin_app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["status"], "degraded");
+        assert_eq!(body["tempo_rpc"], "error");
+    }
+
+    // T19: Metrics endpoint returns Prometheus format
+    #[tokio::test]
+    async fn test_metrics_endpoint_prometheus_format() {
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr, None).await;
+        let admin_app = crate::admin::admin_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/paygate/metrics")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = admin_app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let content_type = resp.headers().get("content-type").unwrap().to_str().unwrap();
+        assert!(
+            content_type.contains("text/plain"),
+            "metrics should return text/plain content type"
+        );
+
+        let body = String::from_utf8(
+            axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap()
+                .to_vec(),
+        )
+        .unwrap();
+
+        // Prometheus output is text-based, may be empty if no metrics recorded yet
+        // but should at least be valid (no error)
+        assert!(
+            body.is_empty() || body.contains('#') || body.contains("paygate_"),
+            "metrics should be empty or contain Prometheus-formatted lines"
+        );
+    }
+
+    // Receipt endpoint: known tx_hash returns 200
+    #[tokio::test]
+    async fn test_receipt_endpoint_found() {
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr, None).await;
+
+        // Insert a payment record directly
+        let record = paygate_common::types::PaymentRecord {
+            id: "test_id".into(),
+            tx_hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa".into(),
+            payer_address: "0x9E2b000000000000000000000000000000000001".into(),
+            amount: 5000,
+            token_address: "0x1234000000000000000000000000000000000001".into(),
+            endpoint: "POST /v1/chat".into(),
+            request_hash: None,
+            quote_id: None,
+            block_number: 100,
+            verified_at: chrono::Utc::now().timestamp(),
+            status: "verified".into(),
+        };
+        state.db_writer.insert_payment(record).await.unwrap();
+
+        let admin_app = crate::admin::admin_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/paygate/receipts/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = admin_app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["tx_hash"], "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+        assert_eq!(body["payer_address"], "0x9E2b000000000000000000000000000000000001");
+        assert_eq!(body["amount"], 5000);
+        assert_eq!(body["status"], "verified");
+    }
+
+    // Receipt endpoint: unknown tx_hash returns 404
+    #[tokio::test]
+    async fn test_receipt_endpoint_not_found() {
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr, None).await;
+        let admin_app = crate::admin::admin_router(state);
+
+        let req = Request::builder()
+            .method("GET")
+            .uri("/paygate/receipts/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = admin_app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::NOT_FOUND);
+
+        let body: serde_json::Value = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap(),
+        )
+        .unwrap();
+        assert_eq!(body["error"], "payment not found");
+    }
+
+    // Webhook delivery test: payment triggers webhook POST
+    #[tokio::test]
+    async fn test_webhook_delivery() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let received = Arc::new(AtomicBool::new(false));
+        let received_clone = received.clone();
+
+        // Start a webhook receiver server
+        let webhook_app = Router::new().fallback(move || {
+            let received = received_clone.clone();
+            async move {
+                received.store(true, Ordering::SeqCst);
+                "ok"
+            }
+        });
+        let webhook_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let webhook_addr = webhook_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(webhook_listener, webhook_app).into_future());
+
+        let webhook_sender = crate::webhook::WebhookSender::new(
+            reqwest::Client::new(),
+            format!("http://{webhook_addr}/webhook"),
+            5,
+        );
+
+        webhook_sender.notify_payment_verified(
+            "0xabc123",
+            "0x9E2b000000000000000000000000000000000001",
+            5000,
+            "POST /v1/chat",
+        );
+
+        // Give the async task time to deliver
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+
+        assert!(
+            received.load(Ordering::SeqCst),
+            "webhook should have been delivered"
+        );
+    }
+
+    // Webhook failure test: bad webhook URL doesn't block
+    #[tokio::test]
+    async fn test_webhook_failure_does_not_block() {
+        let webhook_sender = crate::webhook::WebhookSender::new(
+            reqwest::Client::new(),
+            "http://127.0.0.1:1/nonexistent".into(), // will fail to connect
+            1, // 1 second timeout
+        );
+
+        let start = std::time::Instant::now();
+        webhook_sender.notify_payment_verified(
+            "0xabc123",
+            "0x9E2b000000000000000000000000000000000001",
+            5000,
+            "POST /v1/chat",
+        );
+        let elapsed = start.elapsed();
+
+        // notify_payment_verified should return immediately (fire-and-forget)
+        assert!(
+            elapsed.as_millis() < 50,
+            "webhook notification should be non-blocking, took {}ms",
+            elapsed.as_millis()
+        );
+    }
+
+    // T13: Wrong recipient — dedicated test via gateway handler
+    #[tokio::test]
+    async fn test_wrong_recipient_returns_error() {
+        // This tests the gateway handler with a payment to wrong address.
+        // The verifier will see the Transfer event going to a different address.
+        // We need a mock RPC that returns a receipt with wrong `to`.
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        // Mock RPC: returns a receipt where Transfer `to` is wrong address
+        let rpc_app = Router::new().fallback(|body: String| async move {
+            let req: serde_json::Value = serde_json::from_str(&body).unwrap_or_default();
+            let method = req.get("method").and_then(|m| m.as_str()).unwrap_or("");
+            let resp = match method {
+                "eth_getTransactionReceipt" => {
+                    // Transfer log to WRONG address (not provider)
+                    json!({
+                        "jsonrpc": "2.0",
+                        "result": {
+                            "blockNumber": "0x1",
+                            "logs": [{
+                                "address": "0x1234000000000000000000000000000000000001",
+                                "topics": [
+                                    "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                                    "0x0000000000000000000000009e2b000000000000000000000000000000000001",
+                                    "0x000000000000000000000000dead000000000000000000000000000000000001"
+                                ],
+                                "data": "0x00000000000000000000000000000000000000000000000000000000000003e8"
+                            }]
+                        },
+                        "id": 1
+                    })
+                }
+                "eth_getBlockByNumber" => {
+                    let ts = chrono::Utc::now().timestamp() as u64;
+                    json!({"jsonrpc":"2.0","result":{"timestamp":format!("0x{ts:x}")},"id":1})
+                }
+                _ => json!({"jsonrpc":"2.0","error":{"code":-1},"id":1}),
+            };
+            Json(resp)
+        });
+        let rpc_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let rpc_addr = rpc_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(rpc_listener, rpc_app).into_future());
+
+        let mut state = test_state_with_upstream(upstream_addr, None).await;
+        {
+            let mut config = (*state.current_config()).clone();
+            config.tempo.rpc_urls = vec![format!("http://{rpc_addr}")];
+            state.config.store(Arc::new(config));
+        }
+
+        let app = Router::new()
+            .fallback(gateway_handler)
+            .with_state(state);
+
+        let req = Request::builder()
+            .method("POST")
+            .uri("/v1/chat")
+            .header("X-Payment-Tx", "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+            .header("X-Payment-Payer", "0x9E2b000000000000000000000000000000000001")
+            .body(Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        // Wrong recipient should result in an error (InvalidTransfer or similar)
+        // The exact status depends on decode_transfer_events filtering — it should
+        // return "no matching transfer" since provider address doesn't match
+        assert_ne!(resp.status(), StatusCode::OK, "wrong recipient should not succeed");
+    }
+
+    // 402 flood rate limiter test
+    #[tokio::test]
+    async fn test_402_flood_rate_limiter() {
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let state = test_state_with_upstream(upstream_addr, None).await;
+
+        let app = Router::new()
+            .fallback(gateway_handler)
+            .with_state(state);
+
+        // Send many requests without payment headers from same IP
+        // The 402 flood limiter should eventually reject
+        let mut got_429 = false;
+        for _ in 0..1100 {
+            let app_clone = app.clone();
+            let req = Request::builder()
+                .method("POST")
+                .uri("/v1/chat")
+                .header("x-forwarded-for", "1.2.3.4")
+                .body(Body::empty())
+                .unwrap();
+
+            let resp = app_clone.oneshot(req).await.unwrap();
+            if resp.status() == StatusCode::TOO_MANY_REQUESTS {
+                got_429 = true;
+                break;
+            }
+        }
+        assert!(got_429, "402 flood limiter should eventually return 429");
+    }
 }
