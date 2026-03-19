@@ -260,6 +260,31 @@ async fn cmd_serve(config_path: &str) {
         }
     };
 
+    // SIGHUP config reload task
+    {
+        let config_arc = state.config.clone();
+        let config_path_owned = config_path.to_string();
+        tokio::spawn(async move {
+            let mut sighup = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::hangup())
+                .expect("failed to register SIGHUP handler");
+            loop {
+                sighup.recv().await;
+                tracing::info!("SIGHUP received, reloading config from {}", config_path_owned);
+                match Config::load(Path::new(&config_path_owned)) {
+                    Ok(new_config) => {
+                        config_arc.store(Arc::new(new_config));
+                        metrics::record_config_reload("success");
+                        tracing::info!("Config reloaded successfully");
+                    }
+                    Err(e) => {
+                        metrics::record_config_reload("failure");
+                        tracing::error!("Config reload failed: {e}");
+                    }
+                }
+            }
+        });
+    }
+
     // Graceful shutdown
     let shutdown = async {
         let mut sigterm =
