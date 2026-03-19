@@ -475,6 +475,12 @@ pub async fn cleanup_task(reader: DbReader, retention_days: u32) {
                 _ => {}
             }
 
+            // Update metrics gauges
+            if let Ok(count) = reader.active_quote_count() {
+                crate::metrics::set_active_quotes(count);
+            }
+            // TODO: set_active_sessions when sessions are implemented (Wave 2)
+
             // Clean up old request logs (batched to avoid blocking)
             let log_cutoff = now - (retention_days as i64 * 86400);
             loop {
