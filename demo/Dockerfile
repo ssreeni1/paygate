@@ -1,5 +1,5 @@
 # Stage 1: Build PayGate binary
-FROM rust:1.77-slim AS paygate-build
+FROM rust:1.85-slim AS paygate-build
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
