@@ -742,6 +742,15 @@ fn cmd_pricing(config_path: &str, html: bool) {
     );
 }
 
+/// Escape a string for safe HTML interpolation, preventing XSS.
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
 fn print_pricing_html(config: &Config) {
     let mut rows = String::new();
 
@@ -756,21 +765,24 @@ fn print_pricing_html(config: &Config) {
             format_usd(base, TOKEN_DECIMALS)
         };
         rows.push_str(&format!(
-            "        <tr><td><code>{endpoint}</code></td><td>{price_display}</td></tr>\n"
+            "        <tr><td><code>{}</code></td><td>{}</td></tr>\n",
+            html_escape(endpoint),
+            html_escape(&price_display),
         ));
     }
 
     let default_base = parse_price_to_base_units(&config.pricing.default_price).unwrap_or(1000);
     rows.push_str(&format!(
         "        <tr><td><code>* (default)</code></td><td>{}</td></tr>\n",
-        format_usd(default_base, TOKEN_DECIMALS)
+        html_escape(&format_usd(default_base, TOKEN_DECIMALS))
     ));
 
-    let provider_name = if config.provider.name.is_empty() {
+    let provider_name_raw = if config.provider.name.is_empty() {
         "PayGate API"
     } else {
         &config.provider.name
     };
+    let provider_name = html_escape(provider_name_raw);
 
     println!(
         r#"<!DOCTYPE html>
@@ -803,7 +815,7 @@ fn print_pricing_html(config: &Config) {
 </html>"#,
         name = provider_name,
         rows = rows,
-        address = truncate_address(&config.provider.address),
+        address = html_escape(&truncate_address(&config.provider.address)),
     );
 }
 
