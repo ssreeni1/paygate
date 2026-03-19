@@ -3,57 +3,228 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PayGate — Micropayment-Gated API Gateway on Tempo</title>
+  <title>PayGate — The API marketplace where agents don't need API keys</title>
+  <meta name="description" content="Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.">
+  <meta property="og:title" content="PayGate — API marketplace for AI agents">
+  <meta property="og:description" content="Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ssreeni1.github.io/paygate">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="PayGate — API marketplace for AI agents">
+  <meta name="twitter:description" content="Per-request stablecoin payments for APIs. No API keys. No human signup.">
   <link rel="stylesheet" href="style.css">
+  <script defer data-domain="ssreeni1.github.io" src="https://plausible.io/js/script.js"></script>
 </head>
 <body>
-  <div class="container">
-    <header>
-      <h1>PayGate</h1>
-      <p class="subtitle">Wrap any API behind per-request stablecoin micropayments on Tempo.</p>
-    </header>
 
-    <main>
-      <section>
-        <p>
-          PayGate is a reverse proxy that gates API access behind on-chain payments.
-          No API keys, no signup, no monthly billing. Consumers pay per request with
-          USDC on <a href="https://tempo.xyz">Tempo</a>, and AI agents can pay autonomously.
-        </p>
-      </section>
+  <!-- 1. Hero -->
+  <header class="dark">
+    <div class="wrap">
+      <h1>The API marketplace where<br>agents don't need API keys.</h1>
+      <p class="subtitle">Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.</p>
+      <div class="btn-group">
+        <a href="#try-it" class="btn btn-primary">Try the Demo</a>
+        <a href="#add-api" class="btn btn-secondary">Add Your API</a>
+      </div>
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+        </div>
+        <pre><code><span class="prompt">$</span> curl https://demo-paygate.fly.dev/v1/search \
+    -H "Content-Type: application/json" \
+    -d '{"query": "latest AI news"}'
 
-      <section>
-        <h2>How it works</h2>
-        <ol>
-          <li>Consumer calls your API through PayGate</li>
-          <li>PayGate returns <code>402 Payment Required</code> with pricing info and a quote ID</li>
-          <li>Consumer sends a TIP-20 USDC transfer on Tempo with the quote in the memo</li>
-          <li>Consumer retries the request with the <code>X-Payment-Tx</code> header</li>
-          <li>PayGate verifies the payment on-chain (&lt; 100ms) and forwards to your API</li>
-        </ol>
-      </section>
+HTTP/1.1 402 Payment Required
+X-Payment-Amount: 2000
+X-Payment-Token: 0x...USDC
+X-Payment-Recipient: 0x...Provider
+X-Payment-Quote-Id: qt_a1b2c3d4
 
-      <section>
-        <h2>Get started</h2>
-        <ul>
-          <li><a href="quickstart.html">Quickstart guide</a> &mdash; paying for a 402-gated API</li>
-          <li><a href="https://github.com/ssreeni1/paygate">GitHub repository</a> &mdash; source code, spec, and README</li>
-        </ul>
-      </section>
+{
+  "error": "payment_required",
+  "message": "Send 0.002000 USDC to 0x...Provider on Tempo, then retry with X-Payment-Tx header.",
+  "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
+  "pricing": {
+    "amount": "0.002000",
+    "amount_base_units": 2000,
+    "decimals": 6,
+    "token": "0x...USDC",
+    "recipient": "0x...Provider",
+    "quote_id": "qt_a1b2c3d4",
+    "quote_expires_at": "2026-03-19T12:00:00Z",
+    "methods": ["direct", "session"]
+  }
+}</code></pre>
+      </div>
+    </div>
+  </header>
 
-      <section>
-        <h2>For API providers</h2>
-        <pre><code>cargo install paygate
-paygate init
-paygate serve</code></pre>
-        <p>Three commands to monetize any HTTP API with per-request micropayments.</p>
-      </section>
-    </main>
+  <!-- 2. How It Works -->
+  <section>
+    <div class="wrap">
+      <h2>How it works</h2>
+      <div class="steps">
+        <div>
+          <div class="step-num">1</div>
+          <div class="step-title">Request</div>
+          <p class="step-desc">Agent sends a request to your API. PayGate returns 402 with the price.</p>
+        </div>
+        <div>
+          <div class="step-num">2</div>
+          <div class="step-title">Pay</div>
+          <p class="step-desc">Agent sends USDC on Tempo (sub-second finality). Fee sponsorship means zero gas needed.</p>
+        </div>
+        <div>
+          <div class="step-num">3</div>
+          <div class="step-title">Done</div>
+          <p class="step-desc">Agent retries with payment proof. PayGate verifies on-chain and proxies the request.</p>
+        </div>
+      </div>
+    </div>
+  </section>
 
-    <footer>
-      <p>PayGate is open source under the MIT license.</p>
-    </footer>
+  <!-- 3. Try It Now -->
+  <section id="try-it" style="background:#f9fafb">
+    <div class="wrap">
+      <h2>Try it now</h2>
+      <p>The demo marketplace is live on Tempo testnet. Send a real request — see the 402 flow in action.</p>
+      <div class="code-block">
+        <pre><code>curl -X POST https://demo-paygate.fly.dev/v1/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "latest AI news"}'</code></pre>
+      </div>
+      <p style="margin-top:0.5rem"><a href="quickstart.html">Read the quickstart guide</a> to complete the payment and get a 200 response.</p>
+    </div>
+  </section>
+
+  <!-- 4. Available APIs -->
+  <section>
+    <div class="wrap">
+      <h2>Available APIs</h2>
+      <div class="api-grid">
+
+        <div class="api-card">
+          <h3>Web Search</h3>
+          <div class="api-price">$0.002/request</div>
+          <div class="api-endpoint">POST /v1/search</div>
+          <p class="api-desc">Powered by Brave Search API.</p>
+          <div class="code-block">
+            <pre><code>{"query": "AI news"}
+
+{"results": [{"title": "...", "url": "..."}]}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-card">
+          <h3>Web Scrape</h3>
+          <div class="api-price">$0.001/request</div>
+          <div class="api-endpoint">POST /v1/scrape</div>
+          <p class="api-desc">Returns clean markdown from any URL.</p>
+          <div class="code-block">
+            <pre><code>{"url": "https://..."}
+
+{"markdown": "# Article Title\n..."}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-card">
+          <h3>Image Generation</h3>
+          <div class="api-price">$0.01/request</div>
+          <div class="api-endpoint">POST /v1/image</div>
+          <p class="api-desc">SDXL via Replicate.</p>
+          <div class="code-block">
+            <pre><code>{"prompt": "a cat astronaut"}
+
+{"image_url": "https://..."}</code></pre>
+          </div>
+        </div>
+
+        <div class="api-card">
+          <h3>Text Summarize</h3>
+          <div class="api-price">$0.003/request</div>
+          <div class="api-endpoint">POST /v1/summarize</div>
+          <p class="api-desc">Claude Haiku.</p>
+          <div class="code-block">
+            <pre><code>{"text": "Long article..."}
+
+{"summary": "Key points..."}</code></pre>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Add Your API -->
+  <section id="add-api" class="dark">
+    <div class="wrap">
+      <h2>Add your API to the marketplace</h2>
+      <p class="subtitle">Three commands. Sixty seconds. Real payments.</p>
+      <div class="terminal" style="margin-top:1.5rem">
+        <div class="terminal-bar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+        </div>
+        <pre><code><span class="prompt">$</span> npx create-paygate my-api
+<span class="prompt">$</span> cd my-api
+<span class="prompt">$</span> npm start</code></pre>
+      </div>
+      <ul class="feature-list">
+        <li><code>paygate.toml</code> — configure pricing and your wallet address</li>
+        <li><code>Dockerfile</code> — deploy to fly.io, railway, or any container host</li>
+        <li>PayGate handles payments, verification, and proxying</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 6. For Agent Developers -->
+  <section>
+    <div class="wrap">
+      <h2>For agent developers</h2>
+      <p>One SDK. Automatic payment negotiation. Your agent handles 402s without human intervention.</p>
+      <div class="code-block" style="margin-top:1rem">
+        <pre><code>import { PayGateClient } from '@paygate/sdk';
+
+const client = new PayGateClient({ tempoClient });
+
+// Automatic: discovers price, pays, retries
+const result = await client.fetch(
+  'https://demo-paygate.fly.dev/v1/search',
+  { method: 'POST', body: JSON.stringify({ query: 'AI news' }) }
+);</code></pre>
+      </div>
+      <div class="code-block" style="margin-top:0.75rem;display:inline-block">
+        <pre><code>npm install @paygate/sdk</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Built on Tempo -->
+  <div class="tempo-bar">
+    <div class="wrap">
+      Built on <a href="https://tempo.xyz">Tempo</a> — sub-second finality, stablecoin-native, Stripe-backed.
+    </div>
   </div>
+
+  <!-- 8. Footer -->
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-inner">
+        <div>
+          <span class="footer-brand">PayGate</span><br>
+          Open source API payment gateway
+        </div>
+        <div class="footer-links">
+          <a href="https://github.com/ssreeni1/paygate">GitHub</a>
+          <a href="quickstart.html">Documentation</a>
+          <a href="https://tempo.xyz">Tempo</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
 </body>
 </html>
-<!-- deployed Thu Mar 19 14:00:17 EDT 2026 -->
