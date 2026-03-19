@@ -9,8 +9,8 @@
 body {
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   line-height: 1.6;
-  color: #1f2937;
-  background: #ffffff;
+  color: #e6edf3;
+  background: #0d1117;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -33,7 +33,7 @@ body {
 }
 
 .site-nav .nav-wordmark:hover {
-  color: #f0b429;
+  color: #3fb950;
   text-decoration: none;
 }
 
@@ -50,7 +50,7 @@ body {
 }
 
 .site-nav .nav-links a:hover {
-  color: #e6edf3;
+  color: #3fb950;
 }
 
 /* Layout */
@@ -60,18 +60,18 @@ body {
   padding: 0 24px;
 }
 
-/* Dark sections */
+/* Dark sections (all sections are dark now) */
 .dark {
   background: #0d1117;
   color: #e6edf3;
 }
 
-.dark a { color: #f0b429; }
-.dark a:hover { color: #f7c948; }
+/* Links — green accent everywhere */
+a { color: #3fb950; text-decoration: none; }
+a:hover { color: #56d364; text-decoration: underline; }
 
-/* Light sections */
-a { color: #f0b429; text-decoration: none; }
-a:hover { text-decoration: underline; }
+.dark a { color: #3fb950; }
+.dark a:hover { color: #56d364; }
 
 /* Section spacing */
 section, header, footer {
@@ -85,6 +85,7 @@ h1 {
   font-weight: 700;
   line-height: 1.15;
   letter-spacing: -0.03em;
+  color: #e6edf3;
 }
 
 h2 {
@@ -94,6 +95,7 @@ h2 {
   line-height: 1.3;
   letter-spacing: -0.02em;
   margin-bottom: 1rem;
+  color: #e6edf3;
 }
 
 h3 {
@@ -102,6 +104,7 @@ h3 {
   font-weight: 600;
   line-height: 1.4;
   margin-bottom: 0.5rem;
+  color: #e6edf3;
 }
 
 p {
@@ -120,13 +123,10 @@ p {
 code {
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   font-size: 0.875em;
-  background: #f6f8fa;
+  background: #1c2128;
   padding: 0.15em 0.4em;
   border-radius: 4px;
-}
-
-.dark code {
-  background: #161b22;
+  color: #e6edf3;
 }
 
 pre {
@@ -179,7 +179,7 @@ pre code {
 
 .terminal .prompt { color: #7ee787; }
 .terminal .comment { color: #8b949e; }
-.terminal .status-402 { color: #f0b429; }
+.terminal .status-402 { color: #3fb950; }
 .terminal .status-200 { color: #7ee787; }
 
 /* Terminal caption */
@@ -190,7 +190,7 @@ pre code {
 }
 
 .terminal-caption a {
-  color: #f0b429;
+  color: #3fb950;
 }
 
 /* Tempo badge */
@@ -200,24 +200,24 @@ pre code {
   gap: 6px;
   margin-top: 1.25rem;
   padding: 6px 14px;
-  background: rgba(240, 180, 41, 0.12);
-  border: 1px solid rgba(240, 180, 41, 0.3);
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid rgba(63, 185, 80, 0.3);
   border-radius: 20px;
   font-size: 0.82rem;
-  color: #f0b429;
+  color: #3fb950;
   font-family: 'JetBrains Mono', monospace;
   font-weight: 500;
 }
 
 .tempo-badge a {
-  color: #f0b429;
+  color: #3fb950;
   text-decoration: underline;
 }
 
-/* Light code blocks */
+/* Code blocks — dark everywhere */
 .code-block {
-  background: #f6f8fa;
-  border: 1px solid #d0d7de;
+  background: #1c2128;
+  border: 1px solid #30363d;
   border-radius: 8px;
   overflow: hidden;
 }
@@ -225,18 +225,6 @@ pre code {
 .code-block pre {
   padding: 16px 20px;
   margin: 0;
-  color: #1f2937;
-}
-
-/* Dark code blocks */
-.dark .code-block,
-.dark-code {
-  background: #161b22;
-  border-color: #30363d;
-}
-
-.dark .code-block pre,
-.dark-code pre {
   color: #e6edf3;
 }
 
@@ -257,18 +245,13 @@ pre code {
 }
 
 .btn-primary {
-  background: #f0b429;
-  color: #0d1117;
-}
-
-.dark .btn-primary {
-  background: #f0b429;
+  background: #3fb950;
   color: #0d1117;
 }
 
 .btn-secondary {
-  border: 1.5px solid #f0b429;
-  color: #f0b429;
+  border: 1.5px solid #3fb950;
+  color: #3fb950;
   background: transparent;
 }
 
@@ -279,7 +262,7 @@ pre code {
   flex-wrap: wrap;
 }
 
-/* Steps — kept for backward compat but section is replaced */
+/* Steps — kept for backward compat */
 .steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -294,7 +277,7 @@ pre code {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #f0b429;
+  background: #3fb950;
   color: #0d1117;
   font-weight: 700;
   font-size: 0.95rem;
@@ -308,12 +291,12 @@ pre code {
 }
 
 .step-desc {
-  color: #4b5563;
+  color: #8b949e;
   font-size: 0.95rem;
   line-height: 1.55;
 }
 
-/* API Cards */
+/* API Cards — dark */
 .api-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -322,11 +305,11 @@ pre code {
 }
 
 .api-card {
-  background: #ffffff;
-  border: 1px solid #e5e7eb;
+  background: #161b22;
+  border: 1px solid #30363d;
   border-radius: 10px;
   padding: 24px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  box-shadow: none;
 }
 
 .api-card h3 {
@@ -336,20 +319,20 @@ pre code {
 .api-price {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #f0b429;
+  color: #3fb950;
   margin-bottom: 0.5rem;
 }
 
 .api-endpoint {
   font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   font-size: 0.8rem;
-  color: #6b7280;
+  color: #8b949e;
   margin-bottom: 0.5rem;
 }
 
 .api-desc {
   font-size: 0.9rem;
-  color: #4b5563;
+  color: #8b949e;
   margin-bottom: 0.75rem;
 }
 
@@ -361,6 +344,19 @@ pre code {
   padding: 10px 14px;
   font-size: 0.78rem;
   line-height: 1.45;
+}
+
+/* Demo banner above API grid */
+.demo-banner {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-left: 3px solid #3fb950;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  color: #8b949e;
+  line-height: 1.55;
 }
 
 /* Bullets */
@@ -377,30 +373,26 @@ pre code {
 
 .feature-list li::before {
   content: "\2014\00a0";
-  color: #6b7280;
-}
-
-.dark .feature-list li::before {
   color: #8b949e;
 }
 
-/* Tempo bar */
+/* Tempo bar — dark */
 .tempo-bar {
   text-align: center;
   padding: 40px 0;
-  background: #f9fafb;
-  border-top: 1px solid #e5e7eb;
-  border-bottom: 1px solid #e5e7eb;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  border-bottom: 1px solid #30363d;
   font-size: 1rem;
-  color: #6b7280;
+  color: #8b949e;
 }
 
-/* Footer */
+/* Footer — dark */
 footer.site-footer {
   padding: 40px 0;
   font-size: 0.875rem;
-  color: #6b7280;
-  border-top: 1px solid #e5e7eb;
+  color: #8b949e;
+  border-top: 1px solid #30363d;
 }
 
 footer .footer-inner {
@@ -417,20 +409,20 @@ footer .footer-links {
 }
 
 footer a {
-  color: #6b7280;
+  color: #8b949e;
 }
 
 footer a:hover {
-  color: #1f2937;
+  color: #3fb950;
 }
 
 footer .footer-brand {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
-  color: #1f2937;
+  color: #e6edf3;
 }
 
-/* Quickstart page compat */
+/* Quickstart page */
 .container {
   max-width: 720px;
   margin: 0 auto;
@@ -440,7 +432,7 @@ footer .footer-brand {
 .container header {
   margin-bottom: 2.5rem;
   padding: 0 0 1.5rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #30363d;
 }
 
 .container header h1 {
@@ -450,12 +442,12 @@ footer .footer-brand {
 .step {
   margin-bottom: 1.5rem;
   padding-left: 1rem;
-  border-left: 3px solid #e5e7eb;
+  border-left: 3px solid #30363d;
 }
 
 .container pre {
-  background: #1a1a1a;
-  color: #e0e0e0;
+  background: #1c2128;
+  color: #e6edf3;
   padding: 1rem 1.25rem;
   border-radius: 6px;
   overflow-x: auto;
@@ -476,12 +468,17 @@ table {
 th, td {
   text-align: left;
   padding: 0.5rem 0.75rem;
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid #30363d;
 }
 
 th {
   font-weight: 600;
-  background: #f9fafb;
+  background: #161b22;
+  color: #e6edf3;
+}
+
+td {
+  color: #c9d1d9;
 }
 
 ol, ul {
@@ -494,11 +491,12 @@ li {
 }
 
 .note {
-  background: #f0f4f8;
-  border-left: 3px solid #f0b429;
+  background: #161b22;
+  border-left: 3px solid #3fb950;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
   font-size: 0.9rem;
+  color: #8b949e;
 }
 
 /* Responsive */
