@@ -3,21 +3,20 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PayGate — The API marketplace where agents don't need API keys</title>
-  <meta name="description" content="Your agent finds a tool, pays $0.002, gets the answer. No API key. No signup. No human. Per-request stablecoin payments on Tempo.">
+  <title>PayGate — APIs that agents pay for themselves</title>
+  <meta name="description" content="Give your agent a wallet and a URL. It discovers the price, pays on-chain, and gets the answer. No API key. No signup. No human.">
   <meta property="og:title" content="PayGate — APIs that agents pay for themselves">
-  <meta property="og:description" content="Your agent finds a tool, pays $0.002, gets the answer. No API key. No signup. No human.">
+  <meta property="og:description" content="Give your agent a wallet and a URL. It discovers the price, pays on-chain, and gets the answer. No API key. No signup. No human.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://ssreeni1.github.io/paygate">
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="PayGate — APIs that agents pay for themselves">
-  <meta name="twitter:description" content="Agent finds tool. Agent pays $0.002. Agent gets answer. No API key. No human.">
+  <meta name="twitter:description" content="Give your agent $1. Watch it buy its own tools.">
   <link rel="stylesheet" href="style.css">
   <script defer data-domain="ssreeni1.github.io" src="https://plausible.io/js/script.js"></script>
 </head>
 <body>
 
-  <!-- Nav -->
   <nav class="site-nav">
     <a href="index.html" class="nav-wordmark">PayGate</a>
     <div class="nav-links">
@@ -26,26 +25,35 @@
     </div>
   </nav>
 
-  <!-- 1. Hero -->
+  <!-- HERO: The pitch -->
   <header class="dark">
     <div class="wrap">
-      <h1>The API marketplace where<br>agents don't need API keys.</h1>
-      <p class="subtitle">Your agent needs a tool. It finds one, pays $0.002, and gets the answer. No API key. No signup. No human.</p>
+      <p class="eyebrow">Testnet-verified on Tempo &mdash; <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">proof</a></p>
+      <h1>Give your agent $1.<br>Watch it buy its own tools.</h1>
+      <p class="subtitle">No API keys. No signups. No humans in the loop.<br>Just a wallet, a URL, and a stablecoin payment that settles in under a second.</p>
       <div class="btn-group">
-        <a href="https://paygate-demo-production.up.railway.app/v1/pricing" target="_blank" class="btn btn-primary">Try the Demo</a>
-        <a href="#add-api" class="btn btn-secondary">Add Your API</a>
+        <a href="https://paygate-demo-production.up.railway.app/v1/pricing" target="_blank" class="btn btn-primary">See the live marketplace</a>
+        <a href="quickstart.html" class="btn btn-secondary">Read the docs</a>
       </div>
-      <div class="terminal">
+    </div>
+  </header>
+
+  <!-- THE MOMENT: Show, don't tell -->
+  <section class="terminal-section">
+    <div class="wrap">
+      <p class="section-label">This is a real payment flow on Tempo testnet</p>
+      <div class="terminal terminal-hero">
         <div class="terminal-bar">
           <span class="terminal-dot red"></span>
           <span class="terminal-dot yellow"></span>
           <span class="terminal-dot green"></span>
         </div>
-        <pre><code><span class="prompt">$</span> curl -s -X POST .../v1/search -d '{"query": "AI news"}'
+        <pre><code><span class="comment"># Agent needs web search results. Hits the API.</span>
+<span class="prompt">$</span> curl -s -X POST .../v1/search -d '{"query": "AI news"}'
 
-<span class="status-402">402 Payment Required</span>  — amount: 0.002 USDC
+<span class="status-402">402 Payment Required</span>  &mdash; 0.002 USDC
 
-<span class="comment"># Pay on Tempo, get tx hash 0x668ac8...f452</span>
+<span class="comment"># Agent reads the price. Pays on Tempo. Takes 0.4 seconds.</span>
 
 <span class="prompt">$</span> curl -s -X POST .../v1/search \
     -H "X-Payment-Tx: 0x668ac8...f452" \
@@ -54,107 +62,85 @@
 <span class="status-200">200 OK</span>
 {"results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}]}<span class="cursor"></span></code></pre>
       </div>
-      <p class="terminal-caption" style="text-align:left;">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
+      <p class="terminal-caption"><a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">View this transaction on the Tempo explorer &rarr;</a></p>
     </div>
-  </header>
+  </section>
 
-  <!-- 2. Available APIs -->
+  <!-- THE ECONOMICS: Make it visceral -->
+  <section class="stats-section fade-in">
+    <div class="wrap">
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-number">$0.002</div>
+          <div class="stat-label">per web search</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number">0.4s</div>
+          <div class="stat-label">payment finality</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number">0</div>
+          <div class="stat-label">API keys needed</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number">4</div>
+          <div class="stat-label">tools live now</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- THE MARKETPLACE -->
   <section class="fade-in">
     <div class="wrap">
-      <h2>Live on testnet right now</h2>
+      <p class="section-label">Live on testnet</p>
+      <h2>Four tools. Real payments. Try them now.</h2>
       <div class="demo-banner">
-        Demo mode — mock responses, real payments. Every 402 hits the Tempo blockchain. Deploy your own with <code>npx create-paygate</code>.
+        Demo mode &mdash; mock responses, real on-chain payments. Deploy your own with <code>npx create-paygate</code>.
       </div>
       <div class="api-grid">
-
         <div class="api-card">
           <h3>Web Search</h3>
-          <div class="api-price">$0.002/request</div>
+          <div class="api-price">$0.002<span class="api-price-unit">/req</span></div>
           <div class="api-endpoint">POST /v1/search</div>
-          <p class="api-desc">Search the web. Returns titles, URLs, and descriptions.</p>
-          <div class="code-block">
-            <pre><code>{"query": "AI news"}
-
-{"results": [{"title": "...", "url": "..."}]}</code></pre>
-          </div>
+          <p class="api-desc">Search the web. Titles, URLs, descriptions.</p>
         </div>
-
         <div class="api-card">
           <h3>Web Scrape</h3>
-          <div class="api-price">$0.001/request</div>
+          <div class="api-price">$0.001<span class="api-price-unit">/req</span></div>
           <div class="api-endpoint">POST /v1/scrape</div>
-          <p class="api-desc">Extract clean text from any webpage as markdown.</p>
-          <div class="code-block">
-            <pre><code>{"url": "https://..."}
-
-{"markdown": "# Article Title\n..."}</code></pre>
-          </div>
+          <p class="api-desc">Any URL to clean markdown.</p>
         </div>
-
         <div class="api-card">
           <h3>Image Generation</h3>
-          <div class="api-price">$0.01/request</div>
+          <div class="api-price">$0.01<span class="api-price-unit">/req</span></div>
           <div class="api-endpoint">POST /v1/image</div>
-          <p class="api-desc">Generate images from text prompts. Returns a URL.</p>
-          <div class="code-block">
-            <pre><code>{"prompt": "a cat astronaut"}
-
-{"image_url": "https://..."}</code></pre>
-          </div>
+          <p class="api-desc">Text prompt to image URL.</p>
         </div>
-
         <div class="api-card">
           <h3>Text Summarize</h3>
-          <div class="api-price">$0.003/request</div>
+          <div class="api-price">$0.003<span class="api-price-unit">/req</span></div>
           <div class="api-endpoint">POST /v1/summarize</div>
-          <p class="api-desc">Summarize long text into key points.</p>
-          <div class="code-block">
-            <pre><code>{"text": "Long article..."}
-
-{"summary": "Key points..."}</code></pre>
-          </div>
+          <p class="api-desc">Long text to key points.</p>
         </div>
-
       </div>
     </div>
   </section>
 
-  <!-- 3. Add Your API -->
-  <section id="add-api" class="dark fade-in">
-    <div class="wrap">
-      <h2>You have an API. Get paid per request.</h2>
-      <p class="subtitle">Three commands. Your API earns money from every agent that calls it.</p>
-      <div class="terminal" style="margin-top:1.5rem">
-        <div class="terminal-bar">
-          <span class="terminal-dot red"></span>
-          <span class="terminal-dot yellow"></span>
-          <span class="terminal-dot green"></span>
-        </div>
-        <pre><code><span class="prompt">$</span> npx create-paygate my-api
-<span class="prompt">$</span> cd my-api
-<span class="prompt">$</span> npm start</code></pre>
-      </div>
-      <ul class="feature-list">
-        <li>Set your price. Set your wallet. That's the config.</li>
-        <li>Deploy anywhere — fly.io, Railway, any Docker host.</li>
-        <li>PayGate handles the rest: payments, verification, proxying.</li>
-      </ul>
-    </div>
-  </section>
-
-  <!-- 4. For Agent Developers -->
+  <!-- THE SDK -->
   <section class="fade-in">
     <div class="wrap">
-      <h2>Your agent pays for itself</h2>
-      <p>It sees a 402, reads the price, pays on-chain, retries. You write zero payment code.</p>
-      <div class="code-block" style="margin-top:1rem">
+      <p class="section-label">For agent builders</p>
+      <h2>Your agent pays for itself.</h2>
+      <p class="subtitle">It sees a 402, reads the price, pays on-chain, retries. You write zero payment code.</p>
+      <div class="code-block" style="margin-top:1.5rem">
         <pre><code>import { PayGateClient } from '@paygate/sdk';
 
 const client = new PayGateClient({ tempoClient });
 
-// Automatic: discovers price, pays, retries
+// That's it. Agent handles 402s automatically.
 const result = await client.fetch(
-  'https://paygate-demo-production.up.railway.app/v1/search',
+  'https://api.example.com/v1/search',
   { method: 'POST', body: JSON.stringify({ query: 'AI news' }) }
 );</code></pre>
       </div>
@@ -164,23 +150,43 @@ const result = await client.fetch(
     </div>
   </section>
 
-  <!-- 5. Built on Tempo -->
+  <!-- THE CTA -->
+  <section id="add-api" class="cta-section fade-in">
+    <div class="wrap" style="text-align:center">
+      <h2>You have an API.<br>Agents want to pay for it.</h2>
+      <p class="subtitle" style="margin:1rem auto;">Three commands. Your API starts earning from every agent that calls it.</p>
+      <div class="terminal" style="margin:1.5rem auto;text-align:left;">
+        <div class="terminal-bar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
+        </div>
+        <pre><code><span class="prompt">$</span> npx create-paygate my-api
+<span class="prompt">$</span> cd my-api
+<span class="prompt">$</span> npm start
+<span class="comment"># Your API is now earning money.</span></code></pre>
+      </div>
+      <div class="btn-group" style="justify-content:center">
+        <a href="quickstart.html" class="btn btn-primary">Get started</a>
+        <a href="https://github.com/ssreeni1/paygate" class="btn btn-secondary">View source</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- TEMPO -->
   <div class="tempo-bar">
     <div class="wrap">
-      Payments settle in under a second on <a href="https://tempo.xyz">Tempo</a> — the Stripe-backed blockchain built for money.
+      Payments settle in under a second on <a href="https://tempo.xyz">Tempo</a> &mdash; the Stripe-backed blockchain built for money.
     </div>
   </div>
 
-  <!-- 6. Footer -->
   <footer class="site-footer">
     <div class="wrap">
       <div class="footer-inner">
-        <div>
-          <span class="footer-brand">PayGate</span>
-        </div>
+        <span class="footer-brand">PayGate</span>
         <div class="footer-links">
           <a href="https://github.com/ssreeni1/paygate">GitHub</a>
-          <a href="quickstart.html">Documentation</a>
+          <a href="quickstart.html">Docs</a>
           <a href="https://tempo.xyz">Tempo</a>
         </div>
       </div>
@@ -188,10 +194,8 @@ const result = await client.fetch(
   </footer>
 
   <script>
-    // Progressive enhancement: add animation class only when JS is available
     document.querySelectorAll('.fade-in').forEach(el => el.classList.add('will-animate'));
     document.querySelectorAll('.api-card').forEach(el => el.classList.add('will-animate'));
-
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
     }, { threshold: 0.1 });

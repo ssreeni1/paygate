@@ -254,16 +254,6 @@ a.btn-primary:visited {
   flex-wrap: wrap;
 }
 
-.github-stars {
-  display: inline-block;
-  margin-top: 1rem;
-}
-
-.github-stars:hover {
-  text-decoration: none;
-  opacity: 0.8;
-}
-
 /* Steps — kept for backward compat */
 .steps {
   display: grid;
@@ -558,8 +548,102 @@ li {
 .api-grid .api-card:nth-child(3) { transition-delay: 0.15s; }
 .api-grid .api-card:nth-child(4) { transition-delay: 0.2s; }
 
+/* Eyebrow — small label above hero headline */
+.eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  color: #8b949e;
+  letter-spacing: 0.05em;
+  margin-bottom: 1.25rem;
+}
+
+.eyebrow a {
+  color: #3fb950;
+}
+
+/* Section label — small green caps above section headings */
+.section-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #3fb950;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.5rem;
+}
+
+/* Terminal section — slightly different bg for visual break */
+.terminal-section {
+  padding: 48px 0;
+  background: #0a0e13;
+  border-top: 1px solid #1c2128;
+  border-bottom: 1px solid #1c2128;
+}
+
+.terminal-hero {
+  max-width: 680px;
+}
+
+/* Stats grid */
+.stats-section {
+  padding: 56px 0;
+  border-bottom: 1px solid #1c2128;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  text-align: center;
+}
+
+.stat-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: #3fb950;
+  line-height: 1;
+  margin-bottom: 0.5rem;
+}
+
+.stat-label {
+  font-size: 0.85rem;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* CTA section */
+.cta-section {
+  background: #0a0e13;
+  border-top: 1px solid #1c2128;
+  padding: 64px 0;
+}
+
+.cta-section .terminal {
+  max-width: 480px;
+}
+
+.cta-section .btn-group {
+  margin-top: 2rem;
+}
+
+/* Price unit styling */
+.api-price-unit {
+  font-size: 0.75em;
+  opacity: 0.6;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 24px;
+  }
+
+  .stat-number {
+    font-size: 2rem;
+  }
   header {
     padding: 40px 0 32px;
   }
