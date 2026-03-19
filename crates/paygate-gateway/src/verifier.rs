@@ -378,8 +378,11 @@ pub async fn verify_payment(
     };
 
     if let Err(e) = state.db_writer.insert_payment(record).await {
-        if e.to_string().contains("UNIQUE") {
-            return VerificationResult::ReplayDetected;
+        // UNIQUE constraint violation = concurrent replay (another request verified same tx)
+        if let crate::db::DbError::Sqlite(rusqlite::Error::SqliteFailure(err, _)) = &e {
+            if err.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE {
+                return VerificationResult::ReplayDetected;
+            }
         }
         metrics::record_db_error();
         return VerificationResult::RpcError(format!("database write error: {e}"));
