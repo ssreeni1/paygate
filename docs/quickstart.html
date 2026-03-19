@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quickstart — PayGate</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <p><a href="index.html">PayGate</a></p>
+      <h1>Quickstart</h1>
+      <p class="subtitle">How to pay for a 402-gated API.</p>
+    </header>
+
+    <main>
+
+      <!-- What 402 means -->
+      <section id="paying">
+        <h2>What 402 Payment Required means</h2>
+        <p>
+          You received an <code>HTTP 402</code> response because the API you called
+          requires a per-request micropayment. The API is gated by PayGate, a reverse
+          proxy that verifies on-chain payments on the <a href="https://tempo.xyz">Tempo</a>
+          blockchain before forwarding your request.
+        </p>
+        <p>
+          The 402 response includes everything you need to pay: the price, the token
+          address, the recipient wallet, and a <code>quote_id</code> that locks in
+          the quoted price for 5 minutes.
+        </p>
+        <p>Here is what a typical 402 response looks like:</p>
+        <pre><code>HTTP/1.1 402 Payment Required
+
+X-Payment-Required: true
+X-Payment-Amount: 1000
+X-Payment-Decimals: 6
+X-Payment-Token: 0x...USDC
+X-Payment-Recipient: 0x...Provider
+X-Payment-Network: tempo-mainnet
+X-Payment-Chain-Id: 4217
+X-Payment-Quote-Id: qt_a1b2c3d4
+X-Payment-Quote-Expires: 1710799200
+X-Payment-Methods: direct,session
+
+{
+  "error": "payment_required",
+  "message": "Send 0.001000 USDC to 0x...Provider on Tempo, then retry with X-Payment-Tx header.",
+  "help_url": "https://ssreeni1.github.io/paygate/quickstart",
+  "pricing": {
+    "amount": "0.001000",
+    "amount_base_units": 1000,
+    "decimals": 6,
+    "token": "0x...USDC",
+    "recipient": "0x...Provider",
+    "quote_id": "qt_a1b2c3d4",
+    "quote_expires_at": "2026-03-18T12:00:00Z",
+    "methods": ["direct", "session"]
+  }
+}</code></pre>
+        <p>
+          The JSON body is the authoritative pricing source. The <code>X-Payment-*</code>
+          headers provide a machine-parseable summary. Amounts in headers are always in
+          base units (integers); the body includes both decimal strings and base unit integers.
+        </p>
+      </section>
+
+      <!-- Option 1: SDK -->
+      <section id="sdk">
+        <h2>Option 1: Use the SDK (recommended)</h2>
+        <p>
+          The <code>@paygate/sdk</code> TypeScript SDK handles the entire 402 negotiation
+          automatically: it detects a 402 response, sends the on-chain payment, and retries
+          the request with proof of payment.
+        </p>
+
+        <div class="step">
+          <h3>Install</h3>
+          <pre><code>npm install @paygate/sdk</code></pre>
+        </div>
+
+        <div class="step">
+          <h3>Configure a Tempo wallet and create the client</h3>
+          <pre><code>import { PayGateClient } from '@paygate/sdk';
+import { createClient, http, publicActions, walletActions } from 'viem';
+import { Account, tempoActions } from 'viem/tempo';
+import { tempoTestnet } from 'viem/chains';
+
+// Create a Tempo wallet using viem/tempo
+const account = Account.fromSecp256k1(process.env.TEMPO_PRIVATE_KEY!);
+
+const tempoClient = createClient({
+  account,
+  chain: tempoTestnet,
+  transport: http(),
+})
+  .extend(publicActions)
+  .extend(walletActions)
+  .extend(tempoActions());
+
+// Wrap in PayGateClient for auto-pay behavior
+const client = new PayGateClient({
+  tempoClient,
+  autoSession: true,        // auto-create sessions for high-frequency use
+  sessionDeposit: '0.10',   // $0.10 USDC per session
+});</code></pre>
+        </div>
+
+        <div class="step">
+          <h3>Make requests</h3>
+          <p>Use <code>client.fetch()</code> exactly like the standard <code>fetch()</code> API.
+             Payment happens automatically when a 402 is received.</p>
+          <pre><code>const response = await client.fetch(
+  'https://api.example.com/v1/chat/completions',
+  {
+    method: 'POST',
+    body: JSON.stringify({ model: 'gpt-4', messages: [...] }),
+  }
+);
+
+const data = await response.json();
+console.log(data);</code></pre>
+        </div>
+
+        <div class="step">
+          <h3>Discover pricing without paying</h3>
+          <pre><code>const pricing = await client.getPricing('https://api.example.com');
+// => { "POST /v1/chat/completions": { price: "0.005", token: "USDC" } }</code></pre>
+        </div>
+
+        <div class="step">
+          <h3>Use as an AI agent tool</h3>
+          <pre><code>const paidApiTool = {
+  name: 'call_paid_api',
+  description: 'Call a micropayment-gated API. Payment is handled automatically.',
+  parameters: { url: 'string', method: 'string', body: 'object' },
+  execute: async ({ url, method, body }) =&gt; {
+    return await client.fetch(url, { method, body: JSON.stringify(body) });
+  },
+};</code></pre>
+        </div>
+      </section>
+
+      <!-- Option 2: Manual with curl -->
+      <section id="manual">
+        <h2>Option 2: Pay manually with curl</h2>
+        <p>
+          If you are not using the SDK, you can complete the payment flow manually.
+          This is useful for testing, debugging, or integrating from languages without
+          an SDK.
+        </p>
+
+        <div class="step">
+          <h3>Step 1. Get the 402 response</h3>
+          <p>Send a request to the API. You will receive a 402 with pricing details.</p>
+          <pre><code>curl -i https://api.example.com/v1/chat/completions \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}'</code></pre>
+          <p>
+            Note the <code>quote_id</code>, <code>amount</code>, <code>token</code>,
+            and <code>recipient</code> from the JSON body.
+          </p>
+        </div>
+
+        <div class="step">
+          <h3>Step 2. Compute the payment memo</h3>
+          <p>
+            The payment must include a memo that binds it to your specific request.
+            The memo is computed as:
+          </p>
+          <pre><code>requestHash = keccak256(METHOD + " " + PATH + "\n" + BODY)
+memo        = keccak256("paygate" + quoteId + requestHash)</code></pre>
+          <p>
+            <code>METHOD</code> is the uppercase HTTP method. <code>PATH</code> includes
+            the query string. <code>BODY</code> is the raw request body (empty string
+            for GET/DELETE). All inputs are UTF-8 encoded and concatenated as raw bytes.
+          </p>
+        </div>
+
+        <div class="step">
+          <h3>Step 3. Send the TIP-20 payment on Tempo</h3>
+          <p>
+            Send a TIP-20 <code>transferWithMemo</code> transaction on the Tempo blockchain:
+          </p>
+          <ul>
+            <li><strong>to</strong>: the <code>recipient</code> address from the 402 response</li>
+            <li><strong>amount</strong>: at least the <code>amount_base_units</code> from the 402 response</li>
+            <li><strong>memo</strong>: the <code>bytes32</code> memo computed in Step 2</li>
+          </ul>
+          <p>
+            You can use <code>viem</code>, <code>ethers</code>, or any Ethereum-compatible
+            library to send the transaction. The token contract supports the standard
+            <code>transferWithMemo(address to, uint256 amount, bytes32 memo)</code> function.
+          </p>
+        </div>
+
+        <div class="step">
+          <h3>Step 4. Retry with payment proof</h3>
+          <p>
+            Once the transaction is confirmed, resend your original request with two
+            additional headers:
+          </p>
+          <pre><code>curl -i https://api.example.com/v1/chat/completions \
+  -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Payment-Tx: 0xYOUR_TX_HASH" \
+  -H "X-Payment-Payer: 0xYOUR_WALLET_ADDRESS" \
+  -H "X-Payment-Quote-Id: qt_a1b2c3d4" \
+  -d '{"model":"gpt-4","messages":[{"role":"user","content":"hello"}]}'</code></pre>
+          <p>
+            PayGate will verify the payment on-chain (typically under 100ms) and forward
+            your request to the upstream API.
+          </p>
+        </div>
+      </section>
+
+      <!-- Response headers -->
+      <section id="response-headers">
+        <h2>Understanding the response headers</h2>
+        <p>
+          After successful payment verification, PayGate forwards your request to the
+          upstream API and returns the response with additional headers:
+        </p>
+        <table>
+          <thead>
+            <tr>
+              <th>Header</th>
+              <th>Description</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>X-Payment-Receipt</code></td>
+              <td>
+                A unique receipt identifier for this paid request. You can look up
+                the payment details at <code>GET /paygate/receipts/{tx_hash}</code>.
+              </td>
+            </tr>
+            <tr>
+              <td><code>X-Payment-Cost</code></td>
+              <td>
+                The amount charged for this request, in base units (e.g., <code>1000</code>
+                for $0.001000 USDC with 6 decimals).
+              </td>
+            </tr>
+          </tbody>
+        </table>
+        <p>
+          All <code>X-Payment-*</code> headers are stripped before the request is
+          forwarded to the upstream API. The upstream service sees a normal HTTP request.
+        </p>
+      </section>
+
+      <!-- Testnet -->
+      <section id="testnet">
+        <h2>Testnet testing</h2>
+        <p>
+          Before using real funds, test the full payment flow on the Tempo Moderato testnet.
+        </p>
+
+        <table>
+          <thead>
+            <tr>
+              <th>Setting</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Network</td>
+              <td>Tempo Moderato (testnet)</td>
+            </tr>
+            <tr>
+              <td>Chain ID</td>
+              <td><code>42431</code></td>
+            </tr>
+            <tr>
+              <td>RPC URL</td>
+              <td><code>https://rpc.moderato.tempo.xyz</code></td>
+            </tr>
+            <tr>
+              <td>PathUSD token</td>
+              <td><code>0x20c0000000000000000000000000000000000000</code></td>
+            </tr>
+            <tr>
+              <td>Block explorer</td>
+              <td><a href="https://explore.moderato.tempo.xyz/">explore.moderato.tempo.xyz</a></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="step">
+          <h3>Get testnet tokens</h3>
+          <p>
+            Fund your wallet with testnet tokens using the Tempo faucet RPC method:
+          </p>
+          <pre><code>curl -X POST https://rpc.moderato.tempo.xyz \
+  -H "Content-Type: application/json" \
+  -d '{
+    "jsonrpc": "2.0",
+    "method": "tempo_fundAddress",
+    "params": ["YOUR_ADDRESS"],
+    "id": 1
+  }'</code></pre>
+          <p>
+            Replace <code>YOUR_ADDRESS</code> with your wallet address. This will send
+            testnet tokens to your account.
+          </p>
+        </div>
+
+        <div class="step">
+          <h3>Run the end-to-end test</h3>
+          <p>
+            If you are running a PayGate instance, the built-in test command exercises
+            the full payment cycle on testnet:
+          </p>
+          <pre><code>paygate test</code></pre>
+          <p>
+            This starts an echo server, sends a request without payment, funds a test
+            wallet, pays on-chain, verifies the payment, and checks replay protection.
+          </p>
+        </div>
+      </section>
+
+    </main>
+
+    <footer>
+      <p>
+        <a href="index.html">Home</a> &middot;
+        <a href="https://github.com/ssreeni1/paygate">GitHub</a>
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

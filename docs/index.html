@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PayGate — Micropayment-Gated API Gateway on Tempo</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>PayGate</h1>
+      <p class="subtitle">Wrap any API behind per-request stablecoin micropayments on Tempo.</p>
+    </header>
+
+    <main>
+      <section>
+        <p>
+          PayGate is a reverse proxy that gates API access behind on-chain payments.
+          No API keys, no signup, no monthly billing. Consumers pay per request with
+          USDC on <a href="https://tempo.xyz">Tempo</a>, and AI agents can pay autonomously.
+        </p>
+      </section>
+
+      <section>
+        <h2>How it works</h2>
+        <ol>
+          <li>Consumer calls your API through PayGate</li>
+          <li>PayGate returns <code>402 Payment Required</code> with pricing info and a quote ID</li>
+          <li>Consumer sends a TIP-20 USDC transfer on Tempo with the quote in the memo</li>
+          <li>Consumer retries the request with the <code>X-Payment-Tx</code> header</li>
+          <li>PayGate verifies the payment on-chain (&lt; 100ms) and forwards to your API</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>Get started</h2>
+        <ul>
+          <li><a href="quickstart.html">Quickstart guide</a> &mdash; paying for a 402-gated API</li>
+          <li><a href="https://github.com/ssreeni1/paygate">GitHub repository</a> &mdash; source code, spec, and README</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>For API providers</h2>
+        <pre><code>cargo install paygate
+paygate init
+paygate serve</code></pre>
+        <p>Three commands to monetize any HTTP API with per-request micropayments.</p>
+      </section>
+    </main>
+
+    <footer>
+      <p>PayGate is open source under the MIT license.</p>
+    </footer>
+  </div>
+</body>
+</html>
