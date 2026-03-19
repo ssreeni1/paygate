@@ -31,6 +31,66 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_cross_language_hash_vectors() {
+        let json_str = include_str!("../../../tests/fixtures/request_hash_vectors.json");
+        let vectors: serde_json::Value = serde_json::from_str(json_str).unwrap();
+
+        // Verify request_hash vectors
+        for vector in vectors["request_hash_vectors"].as_array().unwrap() {
+            let method = vector["method"].as_str().unwrap();
+            let path = vector["path"].as_str().unwrap();
+            let body = vector["body"].as_str().unwrap();
+            let expected_hash = vector["expected_hash"].as_str().unwrap();
+
+            let hash = request_hash(method, path, body.as_bytes());
+            let hash_hex = format!("0x{}", hex::encode(hash.as_slice()));
+            assert_eq!(
+                hash_hex, expected_hash,
+                "Hash mismatch for vector: {}",
+                vector["description"].as_str().unwrap()
+            );
+
+            // Also verify input_hex
+            let expected_input_hex = vector["input_hex"].as_str().unwrap();
+            let mut input = Vec::new();
+            input.extend_from_slice(method.as_bytes());
+            input.push(b' ');
+            input.extend_from_slice(path.as_bytes());
+            input.push(b'\n');
+            input.extend_from_slice(body.as_bytes());
+            assert_eq!(
+                hex::encode(&input),
+                expected_input_hex,
+                "Input hex mismatch for vector: {}",
+                vector["description"].as_str().unwrap()
+            );
+        }
+
+        // Verify memo vectors
+        for memo_vector in vectors["memo_vectors"].as_array().unwrap() {
+            let quote_id = memo_vector["quote_id"].as_str().unwrap();
+            let expected_memo = memo_vector["expected_memo"].as_str().unwrap();
+            let rh_index = memo_vector["request_hash_vector_index"].as_u64().unwrap() as usize;
+
+            // Get the request hash from the referenced vector
+            let rh_vector = &vectors["request_hash_vectors"][rh_index];
+            let rh = request_hash(
+                rh_vector["method"].as_str().unwrap(),
+                rh_vector["path"].as_str().unwrap(),
+                rh_vector["body"].as_str().unwrap().as_bytes(),
+            );
+
+            let memo = payment_memo(quote_id, &rh);
+            let memo_hex = format!("0x{}", hex::encode(memo.as_slice()));
+            assert_eq!(
+                memo_hex, expected_memo,
+                "Memo mismatch for vector: {}",
+                memo_vector["description"].as_str().unwrap()
+            );
+        }
+    }
+
+    #[test]
     fn test_request_hash_post() {
         let hash = request_hash("POST", "/v1/chat/completions", b"{\"model\":\"gpt-4\"}");
         // Deterministic — same input always produces same hash.

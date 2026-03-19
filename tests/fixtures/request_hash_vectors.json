@@ -6,40 +6,46 @@
       "method": "POST",
       "path": "/v1/chat/completions",
       "body": "{\"model\":\"gpt-4\"}",
-      "input_hex": "504f5354202f76312f636861742f636f6d706c6574696f6e730a7b226d6f64656c223a226770742d34227d"
+      "input_hex": "504f5354202f76312f636861742f636f6d706c6574696f6e730a7b226d6f64656c223a226770742d34227d",
+      "expected_hash": "0x81304edf5f402fb11b0ee8dd0dfa7ee2b2c3cf40da984c18e41e5817a7baa3d3"
     },
     {
       "description": "GET with empty body",
       "method": "GET",
       "path": "/v1/models",
       "body": "",
-      "input_hex": "474554202f76312f6d6f64656c730a"
+      "input_hex": "474554202f76312f6d6f64656c730a",
+      "expected_hash": "0xcb437e7160dc0bf375702d743679d7535d48e7de2e7161b7fa4075c95160aa4b"
     },
     {
       "description": "POST with query string",
       "method": "POST",
       "path": "/v1/chat/completions?stream=true",
       "body": "{\"model\":\"gpt-4\",\"messages\":[]}",
-      "input_hex": "504f5354202f76312f636861742f636f6d706c6574696f6e733f73747265616d3d747275650a7b226d6f64656c223a226770742d34222c226d65737361676573223a5b5d7d"
+      "input_hex": "504f5354202f76312f636861742f636f6d706c6574696f6e733f73747265616d3d747275650a7b226d6f64656c223a226770742d34222c226d65737361676573223a5b5d7d",
+      "expected_hash": "0xd70e4b16b568d1645e35142f5ec4d2bec6171521158f515f45b2f0d53ca3b71a"
     },
     {
       "description": "DELETE with empty body",
       "method": "DELETE",
       "path": "/v1/sessions/abc123",
       "body": "",
-      "input_hex": "44454c455445202f76312f73657373696f6e732f6162633132330a"
+      "input_hex": "44454c455445202f76312f73657373696f6e732f6162633132330a",
+      "expected_hash": "0x1974b41f7368c2e772248dd2ef9c5619d7d306d2881ce71f4f3ac5b41cc10078"
     }
   ],
   "memo_vectors": [
     {
       "description": "Standard memo computation",
       "quote_id": "qt_a1b2c3d4",
-      "note": "memo = keccak256('paygate' || quote_id || request_hash). Use the request_hash from vector 0 above."
+      "request_hash_vector_index": 0,
+      "expected_memo": "0x34de88220a9092781d1f2ae510e48036cc39abe4ac44435416b761249cd86594",
+      "note": "memo = keccak256('paygate' || quote_id || request_hash). Uses request_hash from vector 0."
     }
   ],
   "notes": [
     "input_hex is the hex encoding of: method + ' ' + path + '\\n' + body (UTF-8 bytes)",
-    "The expected hash is keccak256(input_hex decoded to bytes)",
-    "Run tests to populate the expected_hash fields, then lock them in"
+    "expected_hash is keccak256(input_hex decoded to bytes), output as 0x-prefixed hex",
+    "Both Rust and TypeScript implementations MUST produce these exact hashes"
   ]
 }

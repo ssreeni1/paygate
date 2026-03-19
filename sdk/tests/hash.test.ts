@@ -22,6 +22,20 @@ describe('requestHash cross-language parity', () => {
       const inputHex = Buffer.from(input).toString('hex');
       expect(inputHex).toBe(vector.input_hex);
     });
+
+    it(`should match expected hash for: ${vector.description}`, () => {
+      const hash = requestHash(vector.method, vector.path, vector.body);
+      expect(hash).toBe(vector.expected_hash);
+    });
+  }
+
+  for (const memoVector of vectors.memo_vectors) {
+    it(`should match expected memo for: ${memoVector.description}`, () => {
+      const rhVector = vectors.request_hash_vectors[memoVector.request_hash_vector_index];
+      const rh = requestHash(rhVector.method, rhVector.path, rhVector.body);
+      const memo = paymentMemo(memoVector.quote_id, rh);
+      expect(memo).toBe(memoVector.expected_memo);
+    });
   }
 
   it('should be deterministic', () => {
