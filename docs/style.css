@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap');
+
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -10,6 +12,45 @@ body {
   color: #1f2937;
   background: #ffffff;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Nav bar */
+.site-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+}
+
+.site-nav .nav-wordmark {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: #e6edf3;
+  text-decoration: none;
+}
+
+.site-nav .nav-wordmark:hover {
+  color: #f0b429;
+  text-decoration: none;
+}
+
+.site-nav .nav-links {
+  display: flex;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.site-nav .nav-links a {
+  color: #8b949e;
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.site-nav .nav-links a:hover {
+  color: #e6edf3;
 }
 
 /* Layout */
@@ -25,11 +66,11 @@ body {
   color: #e6edf3;
 }
 
-.dark a { color: #58a6ff; }
-.dark a:hover { color: #79b8ff; }
+.dark a { color: #f0b429; }
+.dark a:hover { color: #f7c948; }
 
 /* Light sections */
-a { color: #2563eb; text-decoration: none; }
+a { color: #f0b429; text-decoration: none; }
 a:hover { text-decoration: underline; }
 
 /* Section spacing */
@@ -39,6 +80,7 @@ section, header, footer {
 
 /* Typography */
 h1 {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 2.75rem;
   font-weight: 700;
   line-height: 1.15;
@@ -46,6 +88,7 @@ h1 {
 }
 
 h2 {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 1.75rem;
   font-weight: 700;
   line-height: 1.3;
@@ -54,6 +97,7 @@ h2 {
 }
 
 h3 {
+  font-family: 'JetBrains Mono', monospace;
   font-size: 1.125rem;
   font-weight: 600;
   line-height: 1.4;
@@ -74,7 +118,7 @@ p {
 
 /* Code */
 code {
-  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   font-size: 0.875em;
   background: #f6f8fa;
   padding: 0.15em 0.4em;
@@ -106,7 +150,7 @@ pre code {
   border-radius: 10px;
   overflow: hidden;
   margin-top: 2.5rem;
-  max-width: 720px;
+  max-width: 780px;
 }
 
 .terminal-bar {
@@ -135,6 +179,40 @@ pre code {
 
 .terminal .prompt { color: #7ee787; }
 .terminal .comment { color: #8b949e; }
+.terminal .status-402 { color: #f0b429; }
+.terminal .status-200 { color: #7ee787; }
+
+/* Terminal caption */
+.terminal-caption {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: #8b949e;
+}
+
+.terminal-caption a {
+  color: #f0b429;
+}
+
+/* Tempo badge */
+.tempo-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1.25rem;
+  padding: 6px 14px;
+  background: rgba(240, 180, 41, 0.12);
+  border: 1px solid rgba(240, 180, 41, 0.3);
+  border-radius: 20px;
+  font-size: 0.82rem;
+  color: #f0b429;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
+}
+
+.tempo-badge a {
+  color: #f0b429;
+  text-decoration: underline;
+}
 
 /* Light code blocks */
 .code-block {
@@ -179,18 +257,18 @@ pre code {
 }
 
 .btn-primary {
-  background: #2563eb;
-  color: #ffffff;
+  background: #f0b429;
+  color: #0d1117;
 }
 
 .dark .btn-primary {
-  background: #58a6ff;
+  background: #f0b429;
   color: #0d1117;
 }
 
 .btn-secondary {
-  border: 1.5px solid #58a6ff;
-  color: #58a6ff;
+  border: 1.5px solid #f0b429;
+  color: #f0b429;
   background: transparent;
 }
 
@@ -201,7 +279,7 @@ pre code {
   flex-wrap: wrap;
 }
 
-/* Steps */
+/* Steps — kept for backward compat but section is replaced */
 .steps {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -216,8 +294,8 @@ pre code {
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: #2563eb;
-  color: #ffffff;
+  background: #f0b429;
+  color: #0d1117;
   font-weight: 700;
   font-size: 0.95rem;
   margin-bottom: 0.75rem;
@@ -258,12 +336,12 @@ pre code {
 .api-price {
   font-size: 1.1rem;
   font-weight: 700;
-  color: #2563eb;
+  color: #f0b429;
   margin-bottom: 0.5rem;
 }
 
 .api-endpoint {
-  font-family: 'SF Mono', 'Fira Code', 'JetBrains Mono', monospace;
+  font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
   font-size: 0.8rem;
   color: #6b7280;
   margin-bottom: 0.5rem;
@@ -347,6 +425,7 @@ footer a:hover {
 }
 
 footer .footer-brand {
+  font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
   color: #1f2937;
 }
@@ -416,7 +495,7 @@ li {
 
 .note {
   background: #f0f4f8;
-  border-left: 3px solid #2563eb;
+  border-left: 3px solid #f0b429;
   padding: 0.75rem 1rem;
   margin-bottom: 1rem;
   font-size: 0.9rem;

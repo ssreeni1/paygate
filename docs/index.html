@@ -17,11 +17,24 @@
 </head>
 <body>
 
+  <!-- Nav -->
+  <nav class="site-nav">
+    <a href="index.html" class="nav-wordmark">PayGate</a>
+    <div class="nav-links">
+      <a href="quickstart.html">Docs</a>
+      <a href="https://github.com/ssreeni1/paygate">GitHub</a>
+    </div>
+  </nav>
+
   <!-- 1. Hero -->
   <header class="dark">
     <div class="wrap">
       <h1>The API marketplace where<br>agents don't need API keys.</h1>
       <p class="subtitle">Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.</p>
+      <div class="tempo-badge">
+        &#10003; Verified on Tempo testnet &mdash;
+        <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view transaction</a>
+      </div>
       <div class="btn-group">
         <a href="#try-it" class="btn btn-primary">Try the Demo</a>
         <a href="#add-api" class="btn btn-secondary">Add Your API</a>
@@ -32,56 +45,67 @@
           <span class="terminal-dot yellow"></span>
           <span class="terminal-dot green"></span>
         </div>
-        <pre><code><span class="prompt">$</span> curl https://demo-paygate.fly.dev/v1/search \
+        <pre><code><span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
     -H "Content-Type: application/json" \
     -d '{"query": "latest AI news"}'
 
-HTTP/1.1 402 Payment Required
+<span class="status-402">HTTP/1.1 402 Payment Required</span>
 X-Payment-Amount: 2000
-X-Payment-Token: 0x...USDC
-X-Payment-Recipient: 0x...Provider
 X-Payment-Quote-Id: qt_a1b2c3d4
+{ "error": "payment_required", "pricing": { "amount": "0.002000" } }
 
-{
-  "error": "payment_required",
-  "message": "Send 0.002000 USDC to 0x...Provider on Tempo, then retry with X-Payment-Tx header.",
-  "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
-  "pricing": {
-    "amount": "0.002000",
-    "amount_base_units": 2000,
-    "decimals": 6,
-    "token": "0x...USDC",
-    "recipient": "0x...Provider",
-    "quote_id": "qt_a1b2c3d4",
-    "quote_expires_at": "2026-03-19T12:00:00Z",
-    "methods": ["direct", "session"]
-  }
-}</code></pre>
+<span class="comment"># Pay 0.002 USDC on Tempo...</span>
+<span class="comment"># Transaction confirmed: 0x668ac8...f452</span>
+
+<span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
+    -H "Content-Type: application/json" \
+    -H "X-Payment-Tx: 0x668ac8...f452" \
+    -H "X-Payment-Payer: 0x748B3E...F9c0" \
+    -d '{"query": "latest AI news"}'
+
+<span class="status-200">HTTP/1.1 200 OK</span>
+X-Payment-Receipt: 0x668ac8...f452
+X-Payment-Cost: 0.002000
+{ "results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}] }</code></pre>
       </div>
     </div>
   </header>
 
-  <!-- 2. How It Works -->
+  <!-- 2. The full payment flow -->
   <section>
     <div class="wrap">
-      <h2>How it works</h2>
-      <div class="steps">
-        <div>
-          <div class="step-num">1</div>
-          <div class="step-title">Request</div>
-          <p class="step-desc">Agent sends a request to your API. PayGate returns 402 with the price.</p>
+      <h2>The full payment flow</h2>
+      <p>One request. One on-chain payment. One retry. That's the entire protocol.</p>
+      <div class="terminal">
+        <div class="terminal-bar">
+          <span class="terminal-dot red"></span>
+          <span class="terminal-dot yellow"></span>
+          <span class="terminal-dot green"></span>
         </div>
-        <div>
-          <div class="step-num">2</div>
-          <div class="step-title">Pay</div>
-          <p class="step-desc">Agent sends USDC on Tempo (sub-second finality). Fee sponsorship means zero gas needed.</p>
-        </div>
-        <div>
-          <div class="step-num">3</div>
-          <div class="step-title">Done</div>
-          <p class="step-desc">Agent retries with payment proof. PayGate verifies on-chain and proxies the request.</p>
-        </div>
+        <pre><code><span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
+    -H "Content-Type: application/json" \
+    -d '{"query": "latest AI news"}'
+
+<span class="status-402">HTTP/1.1 402 Payment Required</span>
+X-Payment-Amount: 2000
+X-Payment-Quote-Id: qt_a1b2c3d4
+{ "error": "payment_required", "pricing": { "amount": "0.002000" } }
+
+<span class="comment"># Pay 0.002 USDC on Tempo...</span>
+<span class="comment"># Transaction confirmed: 0x668ac8...f452</span>
+
+<span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
+    -H "Content-Type: application/json" \
+    -H "X-Payment-Tx: 0x668ac8...f452" \
+    -H "X-Payment-Payer: 0x748B3E...F9c0" \
+    -d '{"query": "latest AI news"}'
+
+<span class="status-200">HTTP/1.1 200 OK</span>
+X-Payment-Receipt: 0x668ac8...f452
+X-Payment-Cost: 0.002000
+{ "results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}] }</code></pre>
       </div>
+      <p class="terminal-caption">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
     </div>
   </section>
 
@@ -91,7 +115,7 @@ X-Payment-Quote-Id: qt_a1b2c3d4
       <h2>Try it now</h2>
       <p>The demo marketplace is live on Tempo testnet. Send a real request — see the 402 flow in action.</p>
       <div class="code-block">
-        <pre><code>curl -X POST https://demo-paygate.fly.dev/v1/search \
+        <pre><code>curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
   -H "Content-Type: application/json" \
   -d '{"query": "latest AI news"}'</code></pre>
       </div>
@@ -192,7 +216,7 @@ const client = new PayGateClient({ tempoClient });
 
 // Automatic: discovers price, pays, retries
 const result = await client.fetch(
-  'https://demo-paygate.fly.dev/v1/search',
+  'https://paygate-demo-production.up.railway.app/v1/search',
   { method: 'POST', body: JSON.stringify({ query: 'AI news' }) }
 );</code></pre>
       </div>
