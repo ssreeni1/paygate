@@ -6,7 +6,8 @@ import scrapeRouter, { initBrowser, closeBrowser, isBrowserAvailable } from './r
 import imageRouter from './routes/image.js';
 import summarizeRouter from './routes/summarize.js';
 
-const PORT = Number(process.env.PORT) || 3001;
+// Always use 3001 internally — PayGate gateway handles the public port
+const PORT = Number(process.env.DEMO_PORT) || 3001;
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
