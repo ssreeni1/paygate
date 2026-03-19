@@ -71,41 +71,10 @@ X-Payment-Cost: 0.002000
     </div>
   </header>
 
-  <!-- 2. The full payment flow -->
+  <!-- 2. Proof -->
   <section>
     <div class="wrap">
-      <h2>The full payment flow</h2>
-      <p>One request. One on-chain payment. One retry. That's the entire protocol.</p>
-      <div class="terminal">
-        <div class="terminal-bar">
-          <span class="terminal-dot red"></span>
-          <span class="terminal-dot yellow"></span>
-          <span class="terminal-dot green"></span>
-        </div>
-        <pre><code><span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
-    -H "Content-Type: application/json" \
-    -d '{"query": "latest AI news"}'
-
-<span class="status-402">HTTP/1.1 402 Payment Required</span>
-X-Payment-Amount: 2000
-X-Payment-Quote-Id: qt_a1b2c3d4
-{ "error": "payment_required", "pricing": { "amount": "0.002000" } }
-
-<span class="comment"># Pay 0.002 USDC on Tempo...</span>
-<span class="comment"># Transaction confirmed: 0x668ac8...f452</span>
-
-<span class="prompt">$</span> curl -X POST https://paygate-demo-production.up.railway.app/v1/search \
-    -H "Content-Type: application/json" \
-    -H "X-Payment-Tx: 0x668ac8...f452" \
-    -H "X-Payment-Payer: 0x748B3E...F9c0" \
-    -d '{"query": "latest AI news"}'
-
-<span class="status-200">HTTP/1.1 200 OK</span>
-X-Payment-Receipt: 0x668ac8...f452
-X-Payment-Cost: 0.002000
-{ "results": [{"title": "AI Agents Now Pay For Their Own Tools", ...}] }</code></pre>
-      </div>
-      <p class="terminal-caption">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
+      <p class="terminal-caption" style="text-align:center; font-size:1rem;">Real transaction on Tempo testnet: <a href="https://explore.moderato.tempo.xyz/tx/0x668ac8abac04e26340e6af43509ad1f83e05eae52ec9e5bca52e6ce967b2f452">view on explorer</a></p>
     </div>
   </section>
 
