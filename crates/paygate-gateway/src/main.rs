@@ -996,36 +996,192 @@ async fn cmd_test(is_demo: bool) {
 
     let has_key = std::env::var("PAYGATE_TEST_KEY").is_ok();
 
-    eprintln!("  Starting echo server on :9999");
-    eprintln!("  Starting gateway on :8080 \u{2192} :9999");
+    // Step 0: Start a real echo server on a random port
+    let echo_app = Router::new().fallback(|| async { "echo ok" });
+    let echo_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("  error: failed to start echo server: {e}");
+            std::process::exit(1);
+        }
+    };
+    let echo_addr = echo_listener.local_addr().unwrap();
+    tokio::spawn(axum::serve(echo_listener, echo_app).into_future());
+    eprintln!("  Started echo server on {echo_addr}");
+
+    // Step 0b: Start the gateway pointing at the echo server
+    let db_path = format!("/tmp/paygate_test_{}.db", uuid::Uuid::new_v4());
+    let (db_reader, db_writer) = match db::init_db(&db_path) {
+        Ok(pair) => pair,
+        Err(e) => {
+            eprintln!("  error: failed to init test DB: {e}");
+            std::process::exit(1);
+        }
+    };
+
+    let prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+        .build_recorder()
+        .handle();
+
+    let test_config = config::Config {
+        gateway: config::GatewayConfig {
+            listen: "127.0.0.1:0".into(),
+            admin_listen: "127.0.0.1:0".into(),
+            upstream: format!("http://{echo_addr}"),
+            upstream_timeout_seconds: 5,
+            max_response_body_bytes: 10_485_760,
+        },
+        tempo: config::TempoConfig {
+            network: "testnet".into(),
+            rpc_urls: vec!["http://127.0.0.1:1".into()],
+            failover_timeout_ms: 2000,
+            rpc_pool_max_idle: 10,
+            rpc_timeout_ms: 5000,
+            chain_id: 0,
+            private_key_env: "PAYGATE_TEST_KEY".into(),
+            accepted_token: "0x0000000000000000000000000000000000000001".into(),
+        },
+        provider: config::ProviderConfig {
+            address: "0x7F3a000000000000000000000000000000000001".into(),
+            name: "Test".into(),
+            description: String::new(),
+        },
+        sponsorship: Default::default(),
+        sessions: Default::default(),
+        pricing: config::PricingConfig {
+            default_price: "0.001".into(),
+            quote_ttl_seconds: 300,
+            endpoints: {
+                let mut m = std::collections::HashMap::new();
+                m.insert("GET /v1/models".into(), "0.000".into());
+                m
+            },
+            dynamic: Default::default(),
+            tiers: Default::default(),
+        },
+        rate_limiting: Default::default(),
+        security: Default::default(),
+        webhooks: Default::default(),
+        storage: Default::default(),
+    };
+
+    let state = server::AppState {
+        config: Arc::new(arc_swap::ArcSwap::new(Arc::new(test_config))),
+        db_reader,
+        db_writer,
+        http_client: reqwest::Client::new(),
+        rate_limiter: Arc::new(rate_limit::RateLimiter::new(1000, 100)),
+        webhook_sender: None,
+        prometheus_handle,
+        started_at: std::time::Instant::now(),
+    };
+
+    let gw_app = Router::new()
+        .fallback(gateway_handler)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit::rate_limit_middleware,
+        ))
+        .with_state(state);
+
+    let gw_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("  error: failed to start gateway: {e}");
+            std::process::exit(1);
+        }
+    };
+    let gw_addr = gw_listener.local_addr().unwrap();
+    tokio::spawn(axum::serve(gw_listener, gw_app).into_future());
+    eprintln!("  Started gateway on {gw_addr} \u{2192} {echo_addr}");
     eprintln!();
 
-    // Step 1: Request without payment -> 402
-    eprintln!("  [1/6] Request without payment     402 \u{2713}");
+    let client = reqwest::Client::new();
+    let mut passed = 0u32;
+    let mut failed = 0u32;
 
-    // Steps 2-6: Need testnet key
+    // Step 1: Request to a paid endpoint without payment headers -> 402
+    {
+        let resp = client
+            .post(format!("http://{gw_addr}/v1/chat/completions"))
+            .body("{}")
+            .send()
+            .await;
+        match resp {
+            Ok(r) if r.status().as_u16() == 402 => {
+                // Verify 402 response format
+                let headers = r.headers();
+                let has_required = headers.get("X-Payment-Required").is_some();
+                let has_amount = headers.get("X-Payment-Amount").is_some();
+                let has_recipient = headers.get("X-Payment-Recipient").is_some();
+                let has_methods = headers.get("X-Payment-Methods").is_some();
+                let has_quote_id = headers.get("X-Payment-Quote-Id").is_some();
+
+                let body: serde_json::Value = r.json().await.unwrap_or_default();
+                let has_error = body["error"] == "payment_required";
+                let has_pricing = body["pricing"].is_object();
+                let has_help_url = body["help_url"].is_string();
+
+                if has_required && has_amount && has_recipient && has_methods
+                    && has_quote_id && has_error && has_pricing && has_help_url
+                {
+                    eprintln!("  [1/6] Request without payment     402 \u{2713}  (format validated)");
+                    passed += 1;
+                } else {
+                    eprintln!("  [1/6] Request without payment     402 FAIL (missing headers/fields)");
+                    if !has_required { eprintln!("    missing: X-Payment-Required"); }
+                    if !has_amount { eprintln!("    missing: X-Payment-Amount"); }
+                    if !has_recipient { eprintln!("    missing: X-Payment-Recipient"); }
+                    if !has_methods { eprintln!("    missing: X-Payment-Methods"); }
+                    if !has_quote_id { eprintln!("    missing: X-Payment-Quote-Id"); }
+                    if !has_error { eprintln!("    missing: error=payment_required in body"); }
+                    if !has_pricing { eprintln!("    missing: pricing object in body"); }
+                    if !has_help_url { eprintln!("    missing: help_url in body"); }
+                    failed += 1;
+                }
+            }
+            Ok(r) => {
+                eprintln!("  [1/6] Request without payment     {} FAIL (expected 402)", r.status());
+                failed += 1;
+            }
+            Err(e) => {
+                eprintln!("  [1/6] Request without payment     FAIL ({e})");
+                failed += 1;
+            }
+        }
+    }
+
+    // Steps 2-6: Need testnet key for on-chain payment interactions
     if !has_key {
-        eprintln!("  [2/6] Fund test wallet            -- skipped");
-        eprintln!("    hint: set PAYGATE_TEST_KEY env var with a Tempo testnet private key");
+        eprintln!("  [2/6] Fund test wallet            -- skipped (no PAYGATE_TEST_KEY)");
         eprintln!("  [3/6] Pay and retry               -- skipped");
         eprintln!("  [4/6] Replay same tx              -- skipped");
         eprintln!("  [5/6] Wrong payer address         -- skipped");
         eprintln!("  [6/6] Insufficient amount         -- skipped");
         eprintln!();
-        eprintln!("  4 of 6 tests skipped (no PAYGATE_TEST_KEY).");
+        eprintln!(
+            "  {passed} passed, {failed} failed, 5 skipped (set PAYGATE_TEST_KEY for full e2e)."
+        );
         eprintln!("    hint: export PAYGATE_TEST_KEY=<your-tempo-testnet-private-key>");
-        return;
+    } else {
+        // TODO: Implement actual on-chain payment steps when testnet keys are available
+        eprintln!("  [2/6] Fund test wallet            -- skipped (on-chain not yet wired)");
+        eprintln!("  [3/6] Pay and retry               -- skipped");
+        eprintln!("  [4/6] Replay same tx              -- skipped");
+        eprintln!("  [5/6] Wrong payer address         -- skipped");
+        eprintln!("  [6/6] Insufficient amount         -- skipped");
+        eprintln!();
+        eprintln!(
+            "  {passed} passed, {failed} failed, 5 skipped (on-chain steps pending implementation)."
+        );
     }
 
-    // With testnet key: run full test flow
-    // TODO: Implement actual testnet interactions
-    eprintln!("  [2/6] Fund test wallet            0.01 USDC \u{2713}");
-    eprintln!("  [3/6] Pay and retry               200 \u{2713}  (47ms verify)");
-    eprintln!("  [4/6] Replay same tx              402 \u{2713}");
-    eprintln!("  [5/6] Wrong payer address         402 \u{2713}");
-    eprintln!("  [6/6] Insufficient amount         402 \u{2713}");
-    eprintln!();
-    eprintln!("  All tests passed. Verification latency: 47ms p50, 62ms p99");
+    // Cleanup temp DB
+    let _ = std::fs::remove_file(&db_path);
+
+    if failed > 0 {
+        std::process::exit(1);
+    }
 }
 
 // ─── sessions ────────────────────────────────────────────────────────────────
