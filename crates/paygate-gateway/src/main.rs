@@ -6,6 +6,7 @@ mod mpp;
 mod proxy;
 mod rate_limit;
 mod server;
+mod sponsor;
 mod verifier;
 mod webhook;
 
@@ -184,7 +185,7 @@ async fn cmd_serve(config_path: &str) {
     let admin_app = admin::admin_router(state.clone());
 
     // Build main gateway router with verifier's gateway_handler + rate limiter middleware
-    let gateway_app = Router::new()
+    let mut gateway_app = Router::new()
         .merge(admin::receipt_route())
         .fallback(gateway_handler)
         .layer(middleware::from_fn_with_state(
@@ -192,6 +193,31 @@ async fn cmd_serve(config_path: &str) {
             rate_limit::rate_limit_middleware,
         ))
         .with_state(state.clone());
+
+    // Wire fee sponsorship endpoint (if enabled)
+    if config.sponsorship.enabled {
+        match sponsor::SponsorService::new(
+            state.config.clone(),
+            state.http_client.clone(),
+        ) {
+            Ok(sponsor_service) => {
+                let sponsor_path = config.sponsorship.sponsor_listen.clone();
+                sponsor_service.spawn_balance_checker();
+                gateway_app = gateway_app.route(
+                    &sponsor_path,
+                    axum::routing::post(sponsor::handle_sponsor)
+                        .with_state(sponsor_service),
+                );
+                info!("fee sponsorship enabled at {sponsor_path}");
+            }
+            Err(e) => {
+                eprintln!();
+                eprintln!("  error: {e}");
+                eprintln!("    hint: export PAYGATE_PRIVATE_KEY=<your-tempo-private-key> or set sponsorship.enabled = false");
+                std::process::exit(1);
+            }
+        }
+    }
 
     // Spawn cleanup task
     let cleanup_reader = db_reader.clone();

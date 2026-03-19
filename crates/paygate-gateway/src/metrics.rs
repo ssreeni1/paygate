@@ -58,3 +58,12 @@ pub fn set_active_quotes(count: u64) {
 pub fn record_config_reload(status: &str) {
     counter!("paygate_config_reloads_total", "status" => status.to_string()).increment(1);
 }
+
+// Sponsorship
+pub fn set_sponsor_budget_remaining(amount: u64) {
+    gauge!("paygate_sponsor_budget_remaining").set(amount as f64);
+}
+
+pub fn set_sponsor_wallet_balance(amount: u64) {
+    gauge!("paygate_sponsor_wallet_balance").set(amount as f64);
+}
