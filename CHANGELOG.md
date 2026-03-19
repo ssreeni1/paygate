@@ -1,5 +1,39 @@
 # Changelog
 
+## [0.2.0] - 2026-03-19
+
+### Added
+
+- **Demo marketplace** — 4 API wrappers (search, scrape, image gen, summarize) with mock mode when API keys not configured
+- **Fee sponsorship endpoint** (`/paygate/sponsor`) — Tempo fee payer protocol for gas-free consumer payments, with budget tracking and balance monitoring
+- **`create-paygate` npm package** — interactive wizard scaffolds a complete PayGate project with config, Dockerfile, and sample server
+- **`paygate register` CLI command** — register APIs in on-chain PayGateRegistry contract
+- **Landing page** — story-driven product page with terminal demo, stats section, API cards, scroll animations, copy-to-clipboard, favicon, OG image template
+- **Docs page** — sidebar navigation, section dividers, TL;DR callout, responsive mobile layout
+- **Marketplace E2E test** — real on-chain payments through deployed Railway instance (3 APIs paid, replay protection verified)
+- **Railway deployment** — Dockerfile with multi-stage build (Rust gateway + Node demo server), Railway-compatible with PORT handling
+- **GitHub Pages** — auto-deploy workflow for landing page and docs
+
+### Changed
+
+- Landing page redesigned: full dark mode, green accent (#3fb950), JetBrains Mono headings, hero gradient glow, staggered card animations
+- RPC startup check now non-fatal — gateway starts even if Tempo RPC is temporarily unreachable
+- Demo server uses DEMO_PORT env var to avoid Railway PORT conflict
+- Updated Tempo chain exports: `tempoModerato` (testnet), `tempo` (mainnet)
+- ITIP20.sol: memo parameter now indexed (matches real TIP-20 spec)
+
+### Fixed
+
+- Memo decoded from indexed `topics[3]` instead of data field (caught by testnet E2E)
+- Replay detection uses rusqlite error code instead of fragile string matching
+- Receipt endpoint no longer leaks internal DB errors
+- Config defaults updated: RPC `rpc.presto.tempo.xyz`, chain ID 4217
+- `help_url` updated to real GitHub Pages domain
+- Proxy strips hop-by-hop headers (transfer-encoding, content-length) to fix free endpoint passthrough
+- HTML pricing page escapes values to prevent XSS
+- 402 flood rate limiter wired into gateway handler
+- `format_usd` uses integer math instead of floating point
+
 ## [0.1.0] - 2026-03-19
 
 ### Added
