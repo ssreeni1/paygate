@@ -108,8 +108,10 @@ pub fn format_amount(base_units: BaseUnits, decimals: u8) -> String {
 }
 
 /// Format base units as USD string (e.g., 1000 → "$0.00" for 6 decimals).
+/// Uses integer math only — no floating point.
 pub fn format_usd(base_units: BaseUnits, decimals: u8) -> String {
     let divisor = 10u64.pow(decimals as u32);
-    let cents = (base_units as f64) / (divisor as f64);
-    format!("${cents:.2}")
+    let dollars = base_units / divisor;
+    let cents = (base_units % divisor) / (divisor / 100);
+    format!("${dollars}.{cents:02}")
 }
