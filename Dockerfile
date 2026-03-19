@@ -33,6 +33,7 @@ COPY --from=paygate-build /build/target/release/paygate /usr/local/bin/paygate
 COPY --from=paygate-build /build/schema.sql /app/schema.sql
 COPY --from=demo-build /app/dist ./dist
 COPY --from=demo-build /app/node_modules ./node_modules
+COPY --from=demo-build /app/package.json ./package.json
 COPY --from=demo-build /root/.cache/ms-playwright /root/.cache/ms-playwright
 COPY demo/paygate.toml /app/paygate.toml
 COPY demo/entrypoint.sh /app/entrypoint.sh
