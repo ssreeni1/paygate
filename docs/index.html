@@ -12,6 +12,7 @@
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="PayGate — APIs that agents pay for themselves">
   <meta name="twitter:description" content="Give your agent $1. Watch it buy its own tools.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
   <script defer data-domain="ssreeni1.github.io" src="https://plausible.io/js/script.js"></script>
 </head>
@@ -195,10 +196,11 @@ const result = await client.fetch(
   <script>
     document.querySelectorAll('.fade-in').forEach(el => el.classList.add('will-animate'));
     document.querySelectorAll('.api-card').forEach(el => el.classList.add('will-animate'));
+    document.querySelectorAll('.stats-section').forEach(el => el.classList.add('will-animate'));
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
     }, { threshold: 0.1 });
-    document.querySelectorAll('.fade-in, .api-card').forEach(el => observer.observe(el));
+    document.querySelectorAll('.fade-in, .api-card, .stats-section').forEach(el => observer.observe(el));
   </script>
 
 </body>

@@ -66,6 +66,23 @@ body {
   color: #e6edf3;
 }
 
+/* Hero gradient glow */
+header.dark {
+  position: relative;
+  overflow: hidden;
+}
+
+header.dark::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  left: -10%;
+  width: 50%;
+  height: 70%;
+  background: radial-gradient(ellipse, rgba(63, 185, 80, 0.08) 0%, transparent 70%);
+  pointer-events: none;
+}
+
 /* Links — green accent everywhere */
 a { color: #3fb950; text-decoration: none; }
 a:hover { color: #56d364; text-decoration: underline; }
@@ -154,6 +171,7 @@ pre code {
 
 /* Terminal box */
 .terminal {
+  position: relative;
   background: #161b22;
   border: 1px solid #30363d;
   border-radius: 10px;
@@ -187,7 +205,7 @@ pre code {
 }
 
 .terminal .prompt { color: #7ee787; }
-.terminal .comment { color: #8b949e; }
+.terminal .comment { color: #a5d6a7; }
 .terminal .status-402 { color: #f0883e; text-shadow: 0 0 8px rgba(240, 136, 62, 0.4); }
 .terminal .status-200 { color: #3fb950; text-shadow: 0 0 8px rgba(63, 185, 80, 0.4); }
 
@@ -205,6 +223,7 @@ pre code {
 
 /* Code blocks — dark everywhere */
 .code-block {
+  position: relative;
   background: #1c2128;
   border: 1px solid #30363d;
   border-radius: 8px;
@@ -239,12 +258,24 @@ a.btn-primary:visited {
   background: #3fb950;
   color: #0d1117;
   text-decoration: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+a.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(63, 185, 80, 0.3);
 }
 
 .btn-secondary {
   border: 1.5px solid #3fb950;
   color: #3fb950;
   background: transparent;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.btn-secondary:hover {
+  background: rgba(63, 185, 80, 0.1);
+  transform: translateY(-1px);
 }
 
 .btn-group {
@@ -303,6 +334,11 @@ a.btn-primary:visited {
   padding: 28px;
   box-shadow: none;
 }
+
+.api-card:nth-child(1) { border-left: 3px solid #3fb950; }
+.api-card:nth-child(2) { border-left: 3px solid #58a6ff; }
+.api-card:nth-child(3) { border-left: 3px solid #d2a8ff; }
+.api-card:nth-child(4) { border-left: 3px solid #f0883e; }
 
 .api-card h3 {
   margin-bottom: 0.25rem;
@@ -743,7 +779,23 @@ li {
   color: #3fb950;
   line-height: 1;
   margin-bottom: 0.5rem;
+  transition: transform 0.5s ease, opacity 0.5s ease;
 }
+
+.stats-section.will-animate .stat-number {
+  opacity: 0;
+  transform: scale(0.5);
+}
+
+.stats-section.visible .stat-number {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.stats-section .stat:nth-child(1) .stat-number { transition-delay: 0s; }
+.stats-section .stat:nth-child(2) .stat-number { transition-delay: 0.1s; }
+.stats-section .stat:nth-child(3) .stat-number { transition-delay: 0.15s; }
+.stats-section .stat:nth-child(4) .stat-number { transition-delay: 0.2s; }
 
 .stat-label {
   font-size: 0.85rem;
@@ -831,4 +883,36 @@ li {
     padding: 10px 18px;
     font-size: 0.9rem;
   }
+}
+
+/* Copy-to-clipboard button */
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #21262d;
+  border: 1px solid #30363d;
+  color: #8b949e;
+  font-size: 0.7rem;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  font-family: system-ui, sans-serif;
+  z-index: 10;
+}
+
+.code-block:hover .copy-btn,
+.terminal:hover .copy-btn {
+  opacity: 1;
+}
+
+.copy-btn:hover {
+  background: #30363d;
+  color: #e6edf3;
+}
+
+.copy-btn.copied {
+  color: #3fb950;
 }
