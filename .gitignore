@@ -1,0 +1,30 @@
+# Rust
+/target
+**/*.rs.bk
+Cargo.lock
+
+# Node
+node_modules/
+sdk/dist/
+dashboard/dist/
+
+# Foundry
+contracts/out/
+contracts/cache/
+
+# Environment
+.env
+*.pem
+
+# SQLite
+*.db
+*.db-wal
+*.db-shm
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store

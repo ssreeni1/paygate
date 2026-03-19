@@ -1,0 +1,12 @@
+[package]
+name = "paygate-common"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+alloy-primitives = { workspace = true }
+alloy-sol-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+hex = { workspace = true }
+thiserror = { workspace = true }

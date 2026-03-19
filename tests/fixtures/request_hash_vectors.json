@@ -1,0 +1,45 @@
+{
+  "description": "Shared test vectors for cross-language hash parity. Both Rust and TypeScript must produce identical outputs.",
+  "request_hash_vectors": [
+    {
+      "description": "POST with JSON body",
+      "method": "POST",
+      "path": "/v1/chat/completions",
+      "body": "{\"model\":\"gpt-4\"}",
+      "input_hex": "504f5354202f76312f636861742f636f6d706c6574696f6e730a7b226d6f64656c223a226770742d34227d"
+    },
+    {
+      "description": "GET with empty body",
+      "method": "GET",
+      "path": "/v1/models",
+      "body": "",
+      "input_hex": "474554202f76312f6d6f64656c730a"
+    },
+    {
+      "description": "POST with query string",
+      "method": "POST",
+      "path": "/v1/chat/completions?stream=true",
+      "body": "{\"model\":\"gpt-4\",\"messages\":[]}",
+      "input_hex": "504f5354202f76312f636861742f636f6d706c6574696f6e733f73747265616d3d747275650a7b226d6f64656c223a226770742d34222c226d65737361676573223a5b5d7d"
+    },
+    {
+      "description": "DELETE with empty body",
+      "method": "DELETE",
+      "path": "/v1/sessions/abc123",
+      "body": "",
+      "input_hex": "44454c455445202f76312f73657373696f6e732f6162633132330a"
+    }
+  ],
+  "memo_vectors": [
+    {
+      "description": "Standard memo computation",
+      "quote_id": "qt_a1b2c3d4",
+      "note": "memo = keccak256('paygate' || quote_id || request_hash). Use the request_hash from vector 0 above."
+    }
+  ],
+  "notes": [
+    "input_hex is the hex encoding of: method + ' ' + path + '\\n' + body (UTF-8 bytes)",
+    "The expected hash is keccak256(input_hex decoded to bytes)",
+    "Run tests to populate the expected_hash fields, then lock them in"
+  ]
+}
