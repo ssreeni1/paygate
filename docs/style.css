@@ -253,13 +253,12 @@ pre code {
   opacity: 0.9;
 }
 
-.btn-primary {
+a.btn-primary,
+a.btn-primary:hover,
+a.btn-primary:visited {
   background: #3fb950;
   color: #0d1117;
-}
-
-.btn-primary:hover {
-  color: #0d1117;
+  text-decoration: none;
 }
 
 .btn-secondary {
