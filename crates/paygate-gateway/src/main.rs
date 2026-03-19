@@ -478,6 +478,19 @@ async fn gateway_handler(State(state): State<AppState>, req: Request<Body>) -> R
                 .insert("Retry-After", HeaderValue::from_static("1"));
             resp
         }
+        VerificationResult::RpcError(ref msg) if msg.contains("backpressure") => {
+            let mut resp = (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(json!({
+                    "error": "service_unavailable",
+                    "message": "Server under load, please retry shortly"
+                })),
+            )
+                .into_response();
+            resp.headers_mut()
+                .insert("Retry-After", HeaderValue::from_static("1"));
+            resp
+        }
         VerificationResult::RpcError(_) => {
             let mut resp = (
                 StatusCode::SERVICE_UNAVAILABLE,
