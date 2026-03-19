@@ -1,0 +1,46 @@
+# PayGate Demo Instance Configuration
+# This config points PayGate at the demo marketplace server.
+
+[gateway]
+listen = "0.0.0.0:8080"
+admin_listen = "127.0.0.1:8081"
+upstream = "http://localhost:3001"
+upstream_timeout_seconds = 90
+max_response_body_bytes = 10485760
+
+[tempo]
+network = "testnet"
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
+rpc_timeout_ms = 5000
+chain_id = 4217
+private_key_env = "PAYGATE_PRIVATE_KEY"
+accepted_token = "0x0000000000000000000000000000000000000000"
+
+[provider]
+address = "0x0000000000000000000000000000000000000000"
+name = "PayGate Demo Marketplace"
+description = "Search, scrape, image generation, and summarization APIs"
+
+[pricing]
+default_price = "0.001"
+quote_ttl_seconds = 300
+
+[pricing.endpoints]
+"GET /v1/pricing" = "0.000"
+"POST /v1/search" = "0.002"
+"POST /v1/scrape" = "0.001"
+"POST /v1/image" = "0.01"
+"POST /v1/summarize" = "0.003"
+
+[rate_limiting]
+requests_per_second = 100
+per_payer_per_second = 10
+
+[security]
+tx_expiry_seconds = 300
+
+[webhooks]
+payment_verified_url = ""
+
+[storage]
+request_log_retention_days = 30
