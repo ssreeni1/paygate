@@ -108,10 +108,13 @@ async fn receipt_handler(
             StatusCode::NOT_FOUND,
             Json(json!({"error": "payment not found"})),
         ),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("database error: {e}")})),
-        ),
+        Err(e) => {
+            tracing::error!(tx_hash = %tx_hash, error = %e, "receipt lookup failed");
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "internal error"})),
+            )
+        }
     }
 }
 
