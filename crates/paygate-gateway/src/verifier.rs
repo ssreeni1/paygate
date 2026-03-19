@@ -488,6 +488,10 @@ mod tests {
             http_client: reqwest::Client::new(),
             rate_limiter: Arc::new(RateLimiter::new(100, 10)),
             webhook_sender: None,
+            prometheus_handle: metrics_exporter_prometheus::PrometheusBuilder::new()
+                .build_recorder()
+                .handle(),
+            started_at: std::time::Instant::now(),
         };
         (state, db_path)
     }

@@ -1187,8 +1187,8 @@ mod tests {
         let (db_reader, db_writer) = crate::db::init_db(&db_path).unwrap();
 
         let prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
-            .install_recorder()
-            .expect("failed to install Prometheus recorder");
+            .build_recorder()
+            .handle();
 
         let config = Config {
             gateway: GatewayConfig {
