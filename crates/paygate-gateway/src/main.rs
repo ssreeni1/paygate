@@ -343,8 +343,29 @@ async fn gateway_handler(State(state): State<AppState>, req: Request<Body>) -> R
         };
     }
 
+    // Extract client IP for rate limiting (from X-Forwarded-For or fallback)
+    let client_ip = parts
+        .headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .unwrap_or("unknown")
+        .trim()
+        .to_string();
+
     // Check for payment headers
     if !mpp::has_payment_headers(&parts.headers) {
+        if !state.rate_limiter.check_402_flood(&client_ip) {
+            return (
+                StatusCode::TOO_MANY_REQUESTS,
+                Json(json!({
+                    "error": "rate_limit_exceeded",
+                    "message": "Too many payment discovery requests. Please slow down.",
+                    "retry_after": 60
+                })),
+            )
+                .into_response();
+        }
         return mpp::payment_required_response(&state, &endpoint).await;
     }
 
