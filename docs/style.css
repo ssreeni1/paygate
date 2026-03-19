@@ -254,6 +254,16 @@ a.btn-primary:visited {
   flex-wrap: wrap;
 }
 
+.github-stars {
+  display: inline-block;
+  margin-top: 1rem;
+}
+
+.github-stars:hover {
+  text-decoration: none;
+  opacity: 0.8;
+}
+
 /* Steps — kept for backward compat */
 .steps {
   display: grid;
@@ -511,8 +521,12 @@ li {
   50% { opacity: 0; }
 }
 
-/* Scroll fade-in */
+/* Scroll fade-in — visible by default, animated only when JS adds .will-animate */
 .fade-in {
+  /* No opacity/transform here — content is visible by default */
+}
+
+.fade-in.will-animate {
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.6s ease, transform 0.6s ease;
@@ -523,8 +537,12 @@ li {
   transform: translateY(0);
 }
 
-/* API card staggered entrance */
+/* API card staggered entrance — visible by default */
 .api-card {
+  /* visible by default */
+}
+
+.api-card.will-animate {
   opacity: 0;
   transform: translateY(16px);
   transition: opacity 0.5s ease, transform 0.5s ease;

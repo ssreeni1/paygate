@@ -32,9 +32,12 @@
       <h1>The API marketplace where<br>agents don't need API keys.</h1>
       <p class="subtitle">Wrap any API behind per-request stablecoin payments. AI agents discover, pay, and use your API autonomously.</p>
       <div class="btn-group">
-        <a href="quickstart.html" class="btn btn-primary">Try the Demo</a>
+        <a href="https://paygate-demo-production.up.railway.app/v1/pricing" target="_blank" class="btn btn-primary">Try the Demo</a>
         <a href="#add-api" class="btn btn-secondary">Add Your API</a>
       </div>
+      <a href="https://github.com/ssreeni1/paygate" class="github-stars">
+        <img src="https://img.shields.io/github/stars/ssreeni1/paygate?style=social" alt="GitHub stars">
+      </a>
       <div class="terminal">
         <div class="terminal-bar">
           <span class="terminal-dot red"></span>
@@ -71,7 +74,7 @@
           <h3>Web Search</h3>
           <div class="api-price">$0.002/request</div>
           <div class="api-endpoint">POST /v1/search</div>
-          <p class="api-desc">Powered by Brave Search API.</p>
+          <p class="api-desc">Search the web. Returns titles, URLs, and descriptions.</p>
           <div class="code-block">
             <pre><code>{"query": "AI news"}
 
@@ -83,7 +86,7 @@
           <h3>Web Scrape</h3>
           <div class="api-price">$0.001/request</div>
           <div class="api-endpoint">POST /v1/scrape</div>
-          <p class="api-desc">Returns clean markdown from any URL.</p>
+          <p class="api-desc">Extract clean text from any webpage as markdown.</p>
           <div class="code-block">
             <pre><code>{"url": "https://..."}
 
@@ -95,7 +98,7 @@
           <h3>Image Generation</h3>
           <div class="api-price">$0.01/request</div>
           <div class="api-endpoint">POST /v1/image</div>
-          <p class="api-desc">SDXL via Replicate.</p>
+          <p class="api-desc">Generate images from text prompts. Returns a URL.</p>
           <div class="code-block">
             <pre><code>{"prompt": "a cat astronaut"}
 
@@ -107,7 +110,7 @@
           <h3>Text Summarize</h3>
           <div class="api-price">$0.003/request</div>
           <div class="api-endpoint">POST /v1/summarize</div>
-          <p class="api-desc">Claude Haiku.</p>
+          <p class="api-desc">Summarize long text into key points.</p>
           <div class="code-block">
             <pre><code>{"text": "Long article..."}
 
@@ -189,6 +192,10 @@ const result = await client.fetch(
   </footer>
 
   <script>
+    // Progressive enhancement: add animation class only when JS is available
+    document.querySelectorAll('.fade-in').forEach(el => el.classList.add('will-animate'));
+    document.querySelectorAll('.api-card').forEach(el => el.classList.add('will-animate'));
+
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
     }, { threshold: 0.1 });
