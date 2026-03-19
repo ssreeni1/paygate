@@ -17,6 +17,12 @@ pub fn admin_router(state: AppState) -> axum::Router {
         .with_state(state)
 }
 
+/// Receipt route for the main gateway router (public port).
+pub fn receipt_route() -> axum::Router<AppState> {
+    axum::Router::new()
+        .route("/paygate/receipts/{tx_hash}", get(receipt_handler))
+}
+
 async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
     let config = state.current_config();
 

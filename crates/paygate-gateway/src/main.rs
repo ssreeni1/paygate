@@ -185,6 +185,7 @@ async fn cmd_serve(config_path: &str) {
 
     // Build main gateway router with verifier's gateway_handler + rate limiter middleware
     let gateway_app = Router::new()
+        .merge(admin::receipt_route())
         .fallback(gateway_handler)
         .layer(middleware::from_fn_with_state(
             state.clone(),
