@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.3.0] - 2026-03-23
+
+### Added
+
+- **Live transaction feed** on marketplace page — auto-refreshing every 10s with slide-in animations
+- **GET /paygate/transactions** endpoint — returns recent payments with totals, revenue, and Blockscout explorer links
+- **Marketplace UI page** (`marketplace.html`) — fetches live API data, interactive "Try it" panels that execute real 402 requests
+- **⟨$⟩ logo** — dollar sign in green brackets, integrated across nav, footer, and favicon
+- **Sound toggle** on transaction feed — opt-in coin chime on new payments via Web Audio API
+- **Stats bar** with live payment count, revenue counter, and green pulse dot
+- **Syntax highlighting** in code blocks (keywords coral, strings green)
+- **Code language labels** on docs page (bash, typescript, http, pseudocode)
+- **Scroll-active sidebar** in docs — highlights current section as you scroll
+- **Copy-to-clipboard** buttons on all code blocks
+- **CHEAPEST badge** on lowest-priced API card in marketplace
+
+### Changed
+
+- Landing page redesigned: tighter spacing, subtler section labels, hero glow line, card hover effects with colored shadows, left-aligned CTA
+- API cards now 2x2 grid (was 3+1) with colored left borders (green/blue/purple/orange)
+- Buttons have hover micro-interactions (lift + glow shadow)
+- Terminal comments brightened from gray to muted green for readability
+
+### Fixed
+
+- **Node.js RPC proxy** unblocks Railway → Tempo connectivity (the root cause of all Railway payment verification failures since launch)
+- CORS support added to gateway for cross-origin marketplace UI fetches
+- Marketplace "See the live marketplace" button now opens the marketplace UI page instead of raw JSON
+
 ## [0.2.0] - 2026-03-19
 
 ### Added
