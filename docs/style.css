@@ -916,3 +916,251 @@ li {
 .copy-btn.copied {
   color: #3fb950;
 }
+
+/* ========================================
+   Marketplace page
+   ======================================== */
+
+/* Stats bar */
+.marketplace-stats-bar {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  margin-top: 1rem;
+  padding: 1rem 1.25rem;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+}
+
+.marketplace-stat {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.marketplace-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #3fb950;
+}
+
+.marketplace-stat-label {
+  font-size: 0.85rem;
+  color: #8b949e;
+}
+
+.marketplace-stat-link {
+  font-size: 0.85rem;
+  color: #3fb950 !important;
+}
+
+/* Loading state */
+.marketplace-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 2rem 0;
+  color: #8b949e;
+  font-size: 0.95rem;
+}
+
+.marketplace-spinner {
+  width: 20px;
+  height: 20px;
+  border: 2px solid #30363d;
+  border-top-color: #3fb950;
+  border-radius: 50%;
+  animation: mp-spin 0.8s linear infinite;
+}
+
+@keyframes mp-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Error / fallback banner */
+.marketplace-error {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-left: 3px solid #f0883e;
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  color: #f0883e;
+  line-height: 1.55;
+}
+
+/* Marketplace card enhancements */
+.mp-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.mp-card-header h3 {
+  margin-bottom: 0.25rem;
+}
+
+/* Mode badges */
+.mp-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.mp-badge-live {
+  background: rgba(63, 185, 80, 0.15);
+  color: #3fb950;
+  border: 1px solid rgba(63, 185, 80, 0.3);
+}
+
+.mp-badge-demo {
+  background: rgba(240, 136, 62, 0.15);
+  color: #f0883e;
+  border: 1px solid rgba(240, 136, 62, 0.3);
+}
+
+/* Try it button */
+.mp-try-btn {
+  margin-top: 0.5rem;
+  padding: 8px 18px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Try-it panel */
+.mp-try-panel {
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #30363d;
+}
+
+.mp-panel-section {
+  margin-bottom: 1rem;
+}
+
+.mp-panel-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #8b949e;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.5rem;
+}
+
+/* Curl block */
+.mp-curl-block {
+  position: relative;
+  background: #1c2128;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mp-curl-block pre {
+  padding: 12px 16px;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #e6edf3;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.mp-curl-block pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.mp-copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.mp-curl-block:hover .mp-copy-btn {
+  opacity: 1;
+}
+
+/* Run button */
+.mp-run-btn {
+  padding: 8px 20px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+}
+
+/* Response result block */
+.mp-result-block {
+  background: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mp-result-block pre {
+  padding: 12px 16px;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #e6edf3;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.mp-result-block pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* How-to section */
+.mp-howto ol {
+  padding-left: 1.25rem;
+  margin: 0;
+}
+
+.mp-howto li {
+  font-size: 0.85rem;
+  color: #8b949e;
+  line-height: 1.6;
+  margin-bottom: 0.35rem;
+}
+
+.mp-howto strong {
+  color: #e6edf3;
+}
+
+.mp-howto code {
+  font-size: 0.8em;
+}
+
+/* Stats section spacing */
+.marketplace-stats-section {
+  padding: 24px 0 0;
+  border-top: none;
+}
+
+@media (max-width: 768px) {
+  .marketplace-stats-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+}

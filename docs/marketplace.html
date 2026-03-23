@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Marketplace — PayGate</title>
+  <meta name="description" content="Live APIs on Tempo testnet. Real payments. Browse the PayGate marketplace and try endpoints directly from your browser.">
+  <meta property="og:title" content="Marketplace — PayGate">
+  <meta property="og:description" content="Live APIs on Tempo testnet. Real payments. Try them below.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://ssreeni1.github.io/paygate/marketplace.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Marketplace — PayGate">
+  <meta name="twitter:description" content="Browse live APIs. Real on-chain payments on Tempo testnet.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script defer data-domain="ssreeni1.github.io" src="https://plausible.io/js/script.js"></script>
+</head>
+<body>
+
+  <nav class="site-nav">
+    <a href="index.html" class="nav-wordmark">PayGate</a>
+    <div class="nav-links">
+      <a href="marketplace.html" class="nav-active">Marketplace</a>
+      <a href="quickstart.html">Docs</a>
+      <a href="https://github.com/ssreeni1/paygate">GitHub</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <header class="dark">
+    <div class="wrap">
+      <h1>PayGate Marketplace</h1>
+      <p class="subtitle">Live APIs on Tempo testnet. Real payments. Try them below.</p>
+    </div>
+  </header>
+
+  <!-- DEMO BANNER + STATS -->
+  <section class="marketplace-stats-section fade-in">
+    <div class="wrap">
+      <div class="demo-banner">
+        Demo mode &mdash; mock responses, real on-chain payments.
+      </div>
+      <div class="marketplace-stats-bar">
+        <div class="marketplace-stat">
+          <span class="marketplace-stat-value" id="stat-total">--</span>
+          <span class="marketplace-stat-label">APIs available</span>
+        </div>
+        <div class="marketplace-stat">
+          <span class="marketplace-stat-value" id="stat-mode">DEMO</span>
+          <span class="marketplace-stat-label">mode</span>
+        </div>
+        <div class="marketplace-stat">
+          <a href="quickstart.html" class="marketplace-stat-link">Read the quickstart &rarr;</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- API CARDS -->
+  <section class="fade-in">
+    <div class="wrap">
+      <div id="marketplace-loading" class="marketplace-loading">
+        <div class="marketplace-spinner"></div>
+        <span>Loading marketplace...</span>
+      </div>
+      <div id="marketplace-error" class="marketplace-error" style="display:none;"></div>
+      <div id="api-grid" class="api-grid"></div>
+    </div>
+  </section>
+
+  <!-- TEMPO -->
+  <div class="tempo-bar">
+    <div class="wrap">
+      Payments settle in under a second on <a href="https://tempo.xyz">Tempo</a> &mdash; the Stripe-backed blockchain built for money.
+    </div>
+  </div>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-inner">
+        <span class="footer-brand">PayGate</span>
+        <div class="footer-links">
+          <a href="https://github.com/ssreeni1/paygate">GitHub</a>
+          <a href="quickstart.html">Docs</a>
+          <a href="https://tempo.xyz">Tempo</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    const API_BASE = 'https://paygate-demo-production.up.railway.app';
+    const PRICING_URL = `${API_BASE}/v1/pricing`;
+
+    // Accent colors for card borders
+    const CARD_COLORS = ['#3fb950', '#58a6ff', '#d2a8ff', '#f0883e', '#f778ba', '#79c0ff', '#ffa657', '#7ee787'];
+
+    // Fallback data if API is unreachable
+    const FALLBACK_APIS = [
+      { endpoint: 'POST /v1/search', price: '0.002', currency: 'USDC', description: 'Web search powered by Brave Search API', mode: 'mock', example_request: { query: 'latest AI news', count: 5 } },
+      { endpoint: 'POST /v1/scrape', price: '0.001', currency: 'USDC', description: 'Web scraper — returns clean markdown from any URL', mode: 'live', example_request: { url: 'https://example.com' } },
+      { endpoint: 'POST /v1/image', price: '0.01', currency: 'USDC', description: 'Image generation via Replicate SDXL', mode: 'mock', example_request: { prompt: 'a cat astronaut, digital art' } },
+      { endpoint: 'POST /v1/summarize', price: '0.003', currency: 'USDC', description: 'Text summarization via Claude Haiku', mode: 'mock', example_request: { text: 'Long article text...', max_length: 200 } }
+    ];
+
+    function extractPath(endpoint) {
+      // "POST /v1/search" -> "/v1/search"
+      const parts = endpoint.split(' ');
+      return parts.length > 1 ? parts.slice(1).join(' ') : endpoint;
+    }
+
+    function extractMethod(endpoint) {
+      return endpoint.split(' ')[0] || 'POST';
+    }
+
+    function extractName(endpoint) {
+      const path = extractPath(endpoint);
+      const last = path.split('/').pop();
+      // "search" -> "Web Search"
+      return last.charAt(0).toUpperCase() + last.slice(1);
+    }
+
+    function friendlyName(api) {
+      const path = extractPath(api.endpoint);
+      const slug = path.split('/').pop();
+      const names = {
+        search: 'Web Search',
+        scrape: 'Web Scrape',
+        image: 'Image Generation',
+        summarize: 'Text Summarize'
+      };
+      return names[slug] || slug.charAt(0).toUpperCase() + slug.slice(1);
+    }
+
+    function buildCurlCommand(api) {
+      const path = extractPath(api.endpoint);
+      const method = extractMethod(api.endpoint);
+      const body = api.example_request ? JSON.stringify(api.example_request) : '{}';
+      return `curl -s -X ${method} ${API_BASE}${path} \\
+  -H "Content-Type: application/json" \\
+  -d '${body}'`;
+    }
+
+    function buildCard(api, index) {
+      const color = CARD_COLORS[index % CARD_COLORS.length];
+      const name = friendlyName(api);
+      const isLive = api.mode === 'live';
+      const badgeClass = isLive ? 'mp-badge-live' : 'mp-badge-demo';
+      const badgeText = isLive ? 'LIVE' : 'DEMO';
+      const curlCmd = buildCurlCommand(api);
+      const cardId = `card-${index}`;
+      const panelId = `panel-${index}`;
+
+      return `
+        <div class="api-card mp-card" style="border-left: 3px solid ${color}">
+          <div class="mp-card-header">
+            <h3>${name}</h3>
+            <span class="mp-badge ${badgeClass}">${badgeText}</span>
+          </div>
+          <div class="api-price">$${api.price}<span class="api-price-unit">/req</span></div>
+          <div class="api-endpoint">${api.endpoint}</div>
+          <p class="api-desc">${api.description}</p>
+          <button class="btn btn-secondary mp-try-btn" data-panel="${panelId}" onclick="togglePanel('${panelId}', this)">Try it</button>
+
+          <div id="${panelId}" class="mp-try-panel" style="display:none;">
+            <div class="mp-panel-section">
+              <div class="mp-panel-label">curl command</div>
+              <div class="mp-curl-block">
+                <pre><code id="${panelId}-curl">${escapeHtml(curlCmd)}</code></pre>
+                <button class="copy-btn mp-copy-btn" onclick="copyCurl('${panelId}-curl', this)">Copy</button>
+              </div>
+            </div>
+
+            <div class="mp-panel-section">
+              <button class="btn btn-primary mp-run-btn" onclick="runEndpoint('${panelId}', '${extractPath(api.endpoint)}', '${extractMethod(api.endpoint)}', ${escapeAttr(JSON.stringify(api.example_request || {}))})">Run</button>
+            </div>
+
+            <div id="${panelId}-result" class="mp-result" style="display:none;">
+              <div class="mp-panel-label">Response</div>
+              <div class="mp-result-block">
+                <pre><code id="${panelId}-response"></code></pre>
+              </div>
+            </div>
+
+            <div class="mp-panel-section mp-howto">
+              <div class="mp-panel-label">How it works</div>
+              <ol>
+                <li>Hit the endpoint &mdash; you get a <strong>402 Payment Required</strong> with a price and payment address.</li>
+                <li>Pay the amount in USDC on Tempo testnet.</li>
+                <li>Retry the request with <code>X-Payment-Tx: 0x...</code> header &mdash; get <strong>200 OK</strong>.</li>
+              </ol>
+            </div>
+          </div>
+        </div>`;
+    }
+
+    function escapeHtml(str) {
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    function togglePanel(panelId, btn) {
+      const panel = document.getElementById(panelId);
+      const isOpen = panel.style.display !== 'none';
+      panel.style.display = isOpen ? 'none' : 'block';
+      btn.textContent = isOpen ? 'Try it' : 'Close';
+    }
+
+    function copyCurl(codeId, btn) {
+      const code = document.getElementById(codeId);
+      navigator.clipboard.writeText(code.textContent).then(() => {
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.classList.remove('copied');
+        }, 2000);
+      });
+    }
+
+    async function runEndpoint(panelId, path, method, body) {
+      const resultDiv = document.getElementById(`${panelId}-result`);
+      const responseCode = document.getElementById(`${panelId}-response`);
+      resultDiv.style.display = 'block';
+      responseCode.textContent = 'Requesting...';
+
+      try {
+        const resp = await fetch(`${API_BASE}${path}`, {
+          method: method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+
+        const statusLine = `${resp.status} ${resp.statusText}`;
+        let bodyText;
+        try {
+          const json = await resp.json();
+          bodyText = JSON.stringify(json, null, 2);
+        } catch {
+          bodyText = await resp.text();
+        }
+
+        responseCode.innerHTML = `<span class="${resp.status === 402 ? 'status-402' : resp.status === 200 ? 'status-200' : ''}">${escapeHtml(statusLine)}</span>\n\n${escapeHtml(bodyText)}`;
+      } catch (err) {
+        responseCode.textContent = `Error: ${err.message}\n\nThe API may be temporarily unavailable. Try again in a moment.`;
+      }
+    }
+
+    function renderCards(apis, isFallback) {
+      const grid = document.getElementById('api-grid');
+      const loading = document.getElementById('marketplace-loading');
+      loading.style.display = 'none';
+
+      if (isFallback) {
+        const errDiv = document.getElementById('marketplace-error');
+        errDiv.style.display = 'block';
+        errDiv.innerHTML = 'Live data unavailable &mdash; showing cached catalog. The APIs are hosted on Railway and may take a moment to wake up.';
+      }
+
+      document.getElementById('stat-total').textContent = apis.length;
+
+      let html = '';
+      apis.forEach((api, i) => {
+        html += buildCard(api, i);
+      });
+      grid.innerHTML = html;
+
+      // Apply scroll animations
+      grid.querySelectorAll('.api-card').forEach((el, i) => {
+        el.classList.add('will-animate');
+        el.style.transitionDelay = `${i * 0.1}s`;
+      });
+
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+      }, { threshold: 0.1 });
+
+      grid.querySelectorAll('.api-card').forEach(el => observer.observe(el));
+    }
+
+    async function loadMarketplace() {
+      try {
+        const resp = await fetch(PRICING_URL);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        renderCards(data.apis || [], false);
+      } catch (err) {
+        console.warn('Failed to fetch live pricing, using fallback:', err);
+        renderCards(FALLBACK_APIS, true);
+      }
+    }
+
+    // Init
+    loadMarketplace();
+
+    // Fade-in animations for static sections
+    document.querySelectorAll('.fade-in').forEach(el => el.classList.add('will-animate'));
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+  </script>
+
+</body>
+</html>
