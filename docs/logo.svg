@@ -1,8 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40" fill="none">
-  <!-- Left gate bar -->
-  <rect x="8" y="6" width="4" height="28" rx="2" fill="#e6edf3"/>
-  <!-- Right gate bar -->
-  <rect x="28" y="6" width="4" height="28" rx="2" fill="#e6edf3"/>
-  <!-- Arrow passing through the gate -->
-  <path d="M14 20h16m0 0l-5-5m5 5l-5 5" stroke="#3fb950" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <!--
+    PayGate logo: dollar sign ($) flowing into right arrow (→)
+    "Money goes in, data comes out."
+    Stroke-based for clean scaling at 16px-64px.
+  -->
+  <!-- $ vertical bar -->
+  <line x1="11" y1="7" x2="11" y2="33" stroke="#e6edf3" stroke-width="2.8" stroke-linecap="round"/>
+  <!-- $ top arc of S-curve -->
+  <path d="M17 11 C13 9, 5 10, 5 14.5 C5 19, 17 19, 17 19" stroke="#e6edf3" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+  <!-- $ bottom arc of S-curve -->
+  <path d="M5 21 C5 21, 17 21, 17 25.5 C17 30, 9 31, 5 29" stroke="#e6edf3" stroke-width="2.8" stroke-linecap="round" fill="none"/>
+  <!-- Arrow: horizontal shaft + chevron head -->
+  <line x1="19" y1="20" x2="34" y2="20" stroke="#3fb950" stroke-width="2.8" stroke-linecap="round"/>
+  <polyline points="30,15.5 35,20 30,24.5" stroke="#3fb950" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
 </svg>
