@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS payments (
     status          TEXT NOT NULL DEFAULT 'verified'
 );
 CREATE INDEX IF NOT EXISTS idx_payments_payer ON payments(payer_address);
+CREATE INDEX IF NOT EXISTS idx_payments_verified ON payments(verified_at);
 
 CREATE TABLE IF NOT EXISTS quotes (
     id              TEXT PRIMARY KEY,

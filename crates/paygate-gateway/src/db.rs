@@ -210,6 +210,56 @@ impl DbReader {
         Ok(result)
     }
 
+    /// Get recent transactions ordered by verified_at descending.
+    pub fn recent_transactions(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<PaymentRecord>, DbError> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, tx_hash, payer_address, amount, token_address, endpoint,
+                    request_hash, quote_id, block_number, verified_at, status
+             FROM payments ORDER BY verified_at DESC LIMIT ? OFFSET ?",
+        )?;
+        let rows = stmt.query_map(params![limit, offset], |row| {
+            Ok(PaymentRecord {
+                id: row.get(0)?,
+                tx_hash: row.get(1)?,
+                payer_address: row.get(2)?,
+                amount: row.get::<_, i64>(3)? as BaseUnits,
+                token_address: row.get(4)?,
+                endpoint: row.get(5)?,
+                request_hash: row.get(6)?,
+                quote_id: row.get(7)?,
+                block_number: row.get::<_, i64>(8)? as u64,
+                verified_at: row.get(9)?,
+                status: row.get(10)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    /// Get total transaction count and total revenue.
+    pub fn transaction_stats(&self) -> Result<(u64, BaseUnits), DbError> {
+        let conn = self.conn()?;
+        let (count, revenue) = conn.query_row(
+            "SELECT COUNT(*), COALESCE(SUM(amount), 0) FROM payments",
+            [],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u64,
+                    row.get::<_, i64>(1)? as BaseUnits,
+                ))
+            },
+        )?;
+        Ok((count, revenue))
+    }
+
     /// Count active quotes (for metrics).
     pub fn active_quote_count(&self) -> Result<u64, DbError> {
         let conn = self.conn()?;
@@ -506,5 +556,72 @@ pub async fn cleanup_task(reader: DbReader, retention_days: u32) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    fn setup_test_db() -> (String, DbReader) {
+        let path = format!("/tmp/paygate_db_test_{}.db", uuid::Uuid::new_v4());
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(include_str!("../../../schema.sql")).unwrap();
+        drop(conn);
+        let reader = DbReader::new(&path);
+        (path, reader)
+    }
+
+    fn insert_payment(path: &str, id: &str, tx_hash: &str, amount: i64, verified_at: i64) {
+        let conn = Connection::open(path).unwrap();
+        conn.execute(
+            "INSERT INTO payments (id, tx_hash, payer_address, amount, token_address, endpoint,
+                                   block_number, verified_at, status)
+             VALUES (?, ?, '0x9E2b000000000000000000000000000000000001', ?, '0x20c0000000000000000000000000000000000000',
+                     'POST /v1/echo', 100, ?, 'verified')",
+            params![id, tx_hash, amount, verified_at],
+        ).unwrap();
+    }
+
+    // T1: Recent transactions ordered by verified_at DESC
+    #[test]
+    fn test_recent_transactions_ordered() {
+        let (path, reader) = setup_test_db();
+        insert_payment(&path, "id1", "0xaaa1", 1000, 1000);
+        insert_payment(&path, "id2", "0xaaa2", 2000, 3000);
+        insert_payment(&path, "id3", "0xaaa3", 3000, 2000);
+
+        let txs = reader.recent_transactions(10, 0).unwrap();
+        assert_eq!(txs.len(), 3);
+        assert_eq!(txs[0].verified_at, 3000); // most recent first
+        assert_eq!(txs[1].verified_at, 2000);
+        assert_eq!(txs[2].verified_at, 1000);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T2: Recent transactions on empty DB returns empty vec
+    #[test]
+    fn test_recent_transactions_empty_db() {
+        let (path, reader) = setup_test_db();
+        let txs = reader.recent_transactions(10, 0).unwrap();
+        assert!(txs.is_empty());
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T3: Transaction stats returns correct count and revenue
+    #[test]
+    fn test_transaction_stats_correct() {
+        let (path, reader) = setup_test_db();
+        insert_payment(&path, "id1", "0xbbb1", 1000, 100);
+        insert_payment(&path, "id2", "0xbbb2", 2000, 200);
+        insert_payment(&path, "id3", "0xbbb3", 3000, 300);
+
+        let (count, revenue) = reader.transaction_stats().unwrap();
+        assert_eq!(count, 3);
+        assert_eq!(revenue, 6000);
+
+        let _ = std::fs::remove_file(&path);
     }
 }

@@ -221,6 +221,7 @@ async fn cmd_serve(config_path: &str) {
 
     let mut gateway_app = Router::new()
         .merge(admin::receipt_route())
+        .merge(admin::transactions_route())
         .fallback(gateway_handler)
         .layer(cors)
         .layer(middleware::from_fn_with_state(
@@ -2461,5 +2462,324 @@ mod tests {
             b"ServiceRegistered(bytes32,address,uint256)"
         );
         assert_eq!(sig_hash, expected, "ServiceRegistered event signature mismatch");
+    }
+
+    // ─── Transaction Explorer Tests (T1-T6) ─────────────────────────────
+
+    fn insert_test_payment(conn: &rusqlite::Connection, tx_hash: &str, amount: i64, verified_at: i64) {
+        conn.execute(
+            "INSERT INTO payments (id, tx_hash, payer_address, amount, token_address, endpoint,
+             request_hash, quote_id, block_number, verified_at, status)
+             VALUES (?1, ?2, '0xpayer', ?3, '0xtoken', 'POST /v1/chat', NULL, NULL, 1, ?4, 'verified')",
+            rusqlite::params![
+                format!("pay_{tx_hash}"),
+                tx_hash,
+                amount,
+                verified_at,
+            ],
+        ).unwrap();
+    }
+
+    #[test]
+    fn test_recent_transactions_ordered() {
+        let db_path = format!("/tmp/paygate_tx_test_{}.db", uuid::Uuid::new_v4());
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(include_str!("../../../schema.sql")).unwrap();
+
+        insert_test_payment(&conn, "0xaaa", 1000, 100);
+        insert_test_payment(&conn, "0xbbb", 2000, 300);
+        insert_test_payment(&conn, "0xccc", 3000, 200);
+        drop(conn);
+
+        let reader = crate::db::DbReader::new(&db_path);
+        let txs = reader.recent_transactions(10, 0).unwrap();
+
+        assert_eq!(txs.len(), 3);
+        // Should be ordered by verified_at DESC: 300, 200, 100
+        assert_eq!(txs[0].tx_hash, "0xbbb");
+        assert_eq!(txs[1].tx_hash, "0xccc");
+        assert_eq!(txs[2].tx_hash, "0xaaa");
+
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn test_recent_transactions_empty_db() {
+        let db_path = format!("/tmp/paygate_tx_test_{}.db", uuid::Uuid::new_v4());
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(include_str!("../../../schema.sql")).unwrap();
+        drop(conn);
+
+        let reader = crate::db::DbReader::new(&db_path);
+        let txs = reader.recent_transactions(10, 0).unwrap();
+        assert!(txs.is_empty());
+
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[test]
+    fn test_transaction_stats_correct() {
+        let db_path = format!("/tmp/paygate_tx_test_{}.db", uuid::Uuid::new_v4());
+        let conn = rusqlite::Connection::open(&db_path).unwrap();
+        conn.execute_batch(include_str!("../../../schema.sql")).unwrap();
+
+        insert_test_payment(&conn, "0xd1", 1000, 100);
+        insert_test_payment(&conn, "0xd2", 2000, 200);
+        insert_test_payment(&conn, "0xd3", 5000, 300);
+        drop(conn);
+
+        let reader = crate::db::DbReader::new(&db_path);
+        let (count, revenue) = reader.transaction_stats().unwrap();
+        assert_eq!(count, 3);
+        assert_eq!(revenue, 8000); // 1000 + 2000 + 5000
+
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[tokio::test]
+    async fn test_transactions_endpoint_json() {
+        let db_path = format!("/tmp/paygate_tx_test_{}.db", uuid::Uuid::new_v4());
+        let (db_reader, db_writer) = crate::db::init_db(&db_path).unwrap();
+
+        // Insert a payment directly via SQL
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            insert_test_payment(&conn, "0xe1", 5000, 1000);
+        }
+
+        let prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+            .build_recorder()
+            .handle();
+
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let config = Config {
+            gateway: GatewayConfig {
+                listen: "127.0.0.1:0".into(),
+                admin_listen: "127.0.0.1:0".into(),
+                upstream: format!("http://{upstream_addr}"),
+                upstream_timeout_seconds: 5,
+                max_response_body_bytes: 10_485_760,
+            },
+            tempo: TempoConfig {
+                network: "testnet".into(),
+                rpc_urls: vec!["http://localhost:1".into()],
+                failover_timeout_ms: 2000,
+                rpc_pool_max_idle: 10,
+                rpc_timeout_ms: 5000,
+                chain_id: 0,
+                private_key_env: "PAYGATE_PRIVATE_KEY".into(),
+                accepted_token: "0x1234000000000000000000000000000000000001".into(),
+            },
+            provider: ProviderConfig {
+                address: "0x7F3a000000000000000000000000000000000001".into(),
+                name: "Test".into(),
+                description: String::new(),
+            },
+            sponsorship: Default::default(),
+            sessions: Default::default(),
+            pricing: Default::default(),
+            rate_limiting: Default::default(),
+            security: Default::default(),
+            webhooks: Default::default(),
+            storage: Default::default(),
+        };
+
+        let state = AppState {
+            config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
+            db_reader,
+            db_writer,
+            http_client: reqwest::Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(100, 10)),
+            webhook_sender: None,
+            prometheus_handle,
+            started_at: std::time::Instant::now(),
+        };
+
+        let app = admin::transactions_route().with_state(state);
+
+        let req = axum::http::Request::builder()
+            .uri("/paygate/transactions")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        assert!(json["transactions"].is_array());
+        assert_eq!(json["transactions"].as_array().unwrap().len(), 1);
+        assert_eq!(json["total"], 1);
+        assert_eq!(json["transactions"][0]["tx_hash"], "0xe1");
+        assert_eq!(json["transactions"][0]["amount"], 5000);
+
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[tokio::test]
+    async fn test_transactions_limit_param() {
+        let db_path = format!("/tmp/paygate_tx_test_{}.db", uuid::Uuid::new_v4());
+        let (db_reader, db_writer) = crate::db::init_db(&db_path).unwrap();
+
+        {
+            let conn = rusqlite::Connection::open(&db_path).unwrap();
+            insert_test_payment(&conn, "0xf1", 1000, 100);
+            insert_test_payment(&conn, "0xf2", 2000, 200);
+            insert_test_payment(&conn, "0xf3", 3000, 300);
+        }
+
+        let prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+            .build_recorder()
+            .handle();
+
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let config = Config {
+            gateway: GatewayConfig {
+                listen: "127.0.0.1:0".into(),
+                admin_listen: "127.0.0.1:0".into(),
+                upstream: format!("http://{upstream_addr}"),
+                upstream_timeout_seconds: 5,
+                max_response_body_bytes: 10_485_760,
+            },
+            tempo: TempoConfig {
+                network: "testnet".into(),
+                rpc_urls: vec!["http://localhost:1".into()],
+                failover_timeout_ms: 2000,
+                rpc_pool_max_idle: 10,
+                rpc_timeout_ms: 5000,
+                chain_id: 0,
+                private_key_env: "PAYGATE_PRIVATE_KEY".into(),
+                accepted_token: "0x1234000000000000000000000000000000000001".into(),
+            },
+            provider: ProviderConfig {
+                address: "0x7F3a000000000000000000000000000000000001".into(),
+                name: "Test".into(),
+                description: String::new(),
+            },
+            sponsorship: Default::default(),
+            sessions: Default::default(),
+            pricing: Default::default(),
+            rate_limiting: Default::default(),
+            security: Default::default(),
+            webhooks: Default::default(),
+            storage: Default::default(),
+        };
+
+        let state = AppState {
+            config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
+            db_reader,
+            db_writer,
+            http_client: reqwest::Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(100, 10)),
+            webhook_sender: None,
+            prometheus_handle,
+            started_at: std::time::Instant::now(),
+        };
+
+        let app = admin::transactions_route().with_state(state);
+
+        let req = axum::http::Request::builder()
+            .uri("/paygate/transactions?limit=2")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let body = axum::body::to_bytes(resp.into_body(), usize::MAX).await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+
+        let txs = json["transactions"].as_array().unwrap();
+        assert_eq!(txs.len(), 2);
+        // Total should still be 3
+        assert_eq!(json["total"], 3);
+
+        std::fs::remove_file(&db_path).ok();
+    }
+
+    #[tokio::test]
+    async fn test_transactions_cors_headers() {
+        let db_path = format!("/tmp/paygate_tx_test_{}.db", uuid::Uuid::new_v4());
+        let (db_reader, db_writer) = crate::db::init_db(&db_path).unwrap();
+
+        let prometheus_handle = metrics_exporter_prometheus::PrometheusBuilder::new()
+            .build_recorder()
+            .handle();
+
+        let upstream_app = Router::new().fallback(|| async { "ok" });
+        let upstream_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        tokio::spawn(axum::serve(upstream_listener, upstream_app).into_future());
+
+        let config = Config {
+            gateway: GatewayConfig {
+                listen: "127.0.0.1:0".into(),
+                admin_listen: "127.0.0.1:0".into(),
+                upstream: format!("http://{upstream_addr}"),
+                upstream_timeout_seconds: 5,
+                max_response_body_bytes: 10_485_760,
+            },
+            tempo: TempoConfig {
+                network: "testnet".into(),
+                rpc_urls: vec!["http://localhost:1".into()],
+                failover_timeout_ms: 2000,
+                rpc_pool_max_idle: 10,
+                rpc_timeout_ms: 5000,
+                chain_id: 0,
+                private_key_env: "PAYGATE_PRIVATE_KEY".into(),
+                accepted_token: "0x1234000000000000000000000000000000000001".into(),
+            },
+            provider: ProviderConfig {
+                address: "0x7F3a000000000000000000000000000000000001".into(),
+                name: "Test".into(),
+                description: String::new(),
+            },
+            sponsorship: Default::default(),
+            sessions: Default::default(),
+            pricing: Default::default(),
+            rate_limiting: Default::default(),
+            security: Default::default(),
+            webhooks: Default::default(),
+            storage: Default::default(),
+        };
+
+        let state = AppState {
+            config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
+            db_reader,
+            db_writer,
+            http_client: reqwest::Client::new(),
+            rate_limiter: Arc::new(RateLimiter::new(100, 10)),
+            webhook_sender: None,
+            prometheus_handle,
+            started_at: std::time::Instant::now(),
+        };
+
+        let app = admin::transactions_route().with_state(state);
+
+        let req = axum::http::Request::builder()
+            .uri("/paygate/transactions")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+
+        let cors = resp.headers().get("access-control-allow-origin");
+        assert!(cors.is_some(), "CORS header missing");
+        assert_eq!(
+            cors.unwrap().to_str().unwrap(),
+            "https://ssreeni1.github.io"
+        );
+
+        std::fs::remove_file(&db_path).ok();
     }
 }

@@ -1,13 +1,15 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
     routing::get,
 };
+use serde::Deserialize;
 use serde_json::json;
 
 use crate::server::AppState;
+use paygate_common::types::{format_amount, format_usd, TOKEN_DECIMALS};
 
 pub fn admin_router(state: AppState) -> axum::Router {
     axum::Router::new()
@@ -21,6 +23,12 @@ pub fn admin_router(state: AppState) -> axum::Router {
 pub fn receipt_route() -> axum::Router<AppState> {
     axum::Router::new()
         .route("/paygate/receipts/{tx_hash}", get(receipt_handler))
+}
+
+/// Transactions route for the main gateway router (public port).
+pub fn transactions_route() -> axum::Router<AppState> {
+    axum::Router::new()
+        .route("/paygate/transactions", get(transactions_handler))
 }
 
 async fn health_handler(State(state): State<AppState>) -> impl IntoResponse {
@@ -116,6 +124,94 @@ async fn receipt_handler(
             )
         }
     }
+}
+
+#[derive(Deserialize)]
+struct TransactionsQuery {
+    #[serde(default = "default_limit")]
+    limit: u32,
+    #[serde(default)]
+    offset: u32,
+}
+
+fn default_limit() -> u32 {
+    20
+}
+
+async fn transactions_handler(
+    State(state): State<AppState>,
+    Query(params): Query<TransactionsQuery>,
+) -> impl IntoResponse {
+    let limit = params.limit.min(100);
+    let offset = params.offset;
+
+    let transactions = match state.db_reader.recent_transactions(limit, offset) {
+        Ok(txs) => txs,
+        Err(e) => {
+            tracing::error!(error = %e, "recent_transactions query failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [("Access-Control-Allow-Origin", "https://ssreeni1.github.io")],
+                Json(json!({"error": "internal error"})),
+            );
+        }
+    };
+
+    let (total, total_revenue) = match state.db_reader.transaction_stats() {
+        Ok(stats) => stats,
+        Err(e) => {
+            tracing::error!(error = %e, "transaction_stats query failed");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                [("Access-Control-Allow-Origin", "https://ssreeni1.github.io")],
+                Json(json!({"error": "internal error"})),
+            );
+        }
+    };
+
+    let tx_json: Vec<serde_json::Value> = transactions
+        .iter()
+        .map(|tx| {
+            let amount_formatted = format!(
+                "{}.{:06}",
+                tx.amount / 1_000_000,
+                tx.amount % 1_000_000
+            );
+            let verified_at_iso = chrono::DateTime::from_timestamp(tx.verified_at, 0)
+                .map(|dt| dt.to_rfc3339())
+                .unwrap_or_default();
+            let explorer_url = format!(
+                "https://explore.moderato.tempo.xyz/tx/{}",
+                tx.tx_hash
+            );
+            json!({
+                "tx_hash": tx.tx_hash,
+                "payer_address": tx.payer_address,
+                "amount": tx.amount,
+                "amount_formatted": amount_formatted,
+                "endpoint": tx.endpoint,
+                "verified_at": tx.verified_at,
+                "verified_at_iso": verified_at_iso,
+                "status": tx.status,
+                "explorer_url": explorer_url,
+            })
+        })
+        .collect();
+
+    let revenue_dollars = total_revenue / 1_000_000;
+    let revenue_cents = (total_revenue % 1_000_000) / 10_000;
+    let total_revenue_formatted = format!("${revenue_dollars}.{revenue_cents:02}");
+
+    (
+        StatusCode::OK,
+        [("Access-Control-Allow-Origin", "https://ssreeni1.github.io")],
+        Json(json!({
+            "transactions": tx_json,
+            "total": total,
+            "total_revenue": total_revenue,
+            "total_revenue_formatted": total_revenue_formatted,
+        })),
+    )
 }
 
 async fn check_rpc(client: &reqwest::Client, rpc_urls: &[String]) -> &'static str {
