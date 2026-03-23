@@ -41,6 +41,9 @@
       <div class="mp-stats-bar">
         <span class="mp-stat"><strong style="color:#3fb950">4</strong> APIs</span>
         <span class="mp-stat"><strong style="color:#f0883e">DEMO</strong> mode</span>
+        <span class="mp-stat" id="mp-stat-payments"><strong style="color:#3fb950">&mdash;</strong> payments</span>
+        <span class="mp-stat" id="mp-stat-revenue"><strong style="color:#3fb950">&mdash;</strong> earned</span>
+        <span class="mp-stat"><span class="pulse-dot" id="tx-pulse-dot"></span></span>
         <span class="mp-stat-note">Mock responses, real payments</span>
         <a href="quickstart.html" class="mp-stat-link">Quickstart &rarr;</a>
       </div>
@@ -56,6 +59,30 @@
       </div>
       <div id="marketplace-error" class="marketplace-error" style="display:none;"></div>
       <div id="api-grid" class="api-grid"></div>
+    </div>
+  </section>
+
+  <!-- LIVE TRANSACTIONS -->
+  <section class="tx-feed-section fade-in">
+    <div class="wrap">
+      <div class="tx-feed-header">
+        <h2>Live Transactions</h2>
+        <button class="sound-toggle" id="sound-toggle" title="Toggle transaction sound">🔇</button>
+      </div>
+      <div id="tx-feed" class="tx-feed">
+        <div id="tx-loading" class="tx-loading">
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+          <div class="skeleton-row"></div>
+        </div>
+        <div id="tx-empty" class="tx-empty" style="display:none;">
+          No transactions yet. Be the first &mdash; try an API above.
+        </div>
+        <div id="tx-rows" class="tx-rows"></div>
+      </div>
+      <div id="tx-fallback-note" class="tx-fallback-note" style="display:none;">
+        Live feed from blockchain explorer &mdash; gateway data unavailable
+      </div>
     </div>
   </section>
 
@@ -300,6 +327,203 @@
       entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
     }, { threshold: 0.1 });
     document.querySelectorAll('.fade-in').forEach(el => observer.observe(el));
+
+    // --- Transaction Feed ---
+    const TX_URL = `${API_BASE}/paygate/transactions`;
+    const BLOCKSCOUT_FALLBACK = 'https://explore.moderato.tempo.xyz/api/v2/addresses/0x002925FAFE98cfeB9fdBb7d6045ce318E4BD4b88/token-transfers?type=ERC-20&token=0x20c0000000000000000000000000000000000000';
+    const EXPLORER_BASE = 'https://explore.moderato.tempo.xyz/tx/';
+
+    let lastTxHash = null;
+    let soundEnabled = false;
+
+    // Endpoint -> pill color mapping
+    function endpointColor(endpoint) {
+      if (!endpoint) return { bg: 'rgba(139,148,158,0.15)', fg: '#8b949e' };
+      const e = endpoint.toLowerCase();
+      if (e.includes('search')) return { bg: 'rgba(63,185,80,0.15)', fg: '#3fb950' };
+      if (e.includes('scrape')) return { bg: 'rgba(88,166,255,0.15)', fg: '#58a6ff' };
+      if (e.includes('image'))  return { bg: 'rgba(210,168,255,0.15)', fg: '#d2a8ff' };
+      if (e.includes('summarize')) return { bg: 'rgba(240,136,62,0.15)', fg: '#f0883e' };
+      return { bg: 'rgba(139,148,158,0.15)', fg: '#8b949e' };
+    }
+
+    // Endpoint slug extraction: "POST /v1/search" -> "search"
+    function endpointSlug(endpoint) {
+      if (!endpoint) return 'tx';
+      return endpoint.split('/').pop() || 'tx';
+    }
+
+    // Relative time: "2m ago", "1h ago", "3d ago"
+    function timeAgo(timestamp) {
+      const now = Math.floor(Date.now() / 1000);
+      const diff = now - timestamp;
+      if (diff < 60) return `${diff}s ago`;
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+      return `${Math.floor(diff / 86400)}d ago`;
+    }
+
+    // Truncate address: "0x1234567890abcdef..." -> "0x1234...cdef"
+    function truncAddr(addr) {
+      if (!addr || addr.length < 12) return addr || '';
+      return addr.slice(0, 6) + '...' + addr.slice(-4);
+    }
+
+    // Format amount: integer base units (6 decimals for USDC) -> "0.002000"
+    function fmtAmount(amount) {
+      return (amount / 1_000_000).toFixed(6);
+    }
+
+    // Build a transaction row element
+    function buildTxRow(tx) {
+      const color = endpointColor(tx.endpoint);
+      const slug = endpointSlug(tx.endpoint);
+      const div = document.createElement('div');
+      div.className = 'tx-row tx-row-enter';
+      div.innerHTML = `
+        <span class="tx-time">${timeAgo(tx.verified_at)}</span>
+        <span class="tx-endpoint-pill" style="background:${color.bg};color:${color.fg};">${escapeHtml(slug)}</span>
+        <span class="tx-amount">${fmtAmount(tx.amount)} USDC</span>
+        <span class="tx-payer">${truncAddr(tx.payer_address)}</span>
+        <a class="tx-verify-link" href="${EXPLORER_BASE}${encodeURIComponent(tx.tx_hash)}" target="_blank" rel="noopener">Verify &rarr;</a>
+      `;
+      return div;
+    }
+
+    // Sound: synthesize a short coin chime via Web Audio API
+    function playChime() {
+      if (!soundEnabled) return;
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1200, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.15, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.3);
+      } catch (e) { /* ignore audio errors */ }
+    }
+
+    // Sound toggle
+    document.getElementById('sound-toggle').addEventListener('click', function() {
+      soundEnabled = !soundEnabled;
+      this.textContent = soundEnabled ? '🔊' : '🔇';
+      localStorage.setItem('paygate-sound', soundEnabled ? '1' : '0');
+    });
+
+    // Restore sound preference
+    if (localStorage.getItem('paygate-sound') === '1') {
+      soundEnabled = true;
+      document.getElementById('sound-toggle').textContent = '🔊';
+    }
+
+    // Pulse dot in stats bar
+    function flashPulseDot() {
+      let dot = document.getElementById('tx-pulse-dot');
+      if (!dot) return;
+      dot.classList.remove('pulsing');
+      void dot.offsetWidth; // force reflow
+      dot.classList.add('pulsing');
+    }
+
+    // Update stats bar with payment count + revenue
+    function updateStats(total, totalRevenue) {
+      const countEl = document.getElementById('mp-stat-payments');
+      const revenueEl = document.getElementById('mp-stat-revenue');
+      if (countEl) countEl.innerHTML = `<strong style="color:#3fb950">${total}</strong> payments`;
+      if (revenueEl) revenueEl.innerHTML = `<strong style="color:#3fb950">$${(totalRevenue / 1_000_000).toFixed(2)}</strong> earned`;
+    }
+
+    // Fetch from gateway
+    async function fetchTransactions() {
+      try {
+        const resp = await fetch(`${TX_URL}?limit=20`);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        renderTransactions(data.transactions || [], false);
+        updateStats(data.total || 0, data.total_revenue || 0);
+        return true;
+      } catch (e) {
+        console.warn('Gateway tx fetch failed, trying Blockscout:', e);
+        return false;
+      }
+    }
+
+    // Fallback: fetch from Blockscout
+    async function fetchBlockscout() {
+      try {
+        const resp = await fetch(BLOCKSCOUT_FALLBACK);
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        const items = (data.items || []).slice(0, 20).map(item => ({
+          tx_hash: item.tx_hash || '',
+          payer_address: item.from?.hash || '',
+          amount: parseInt(item.total?.value || '0', 10),
+          endpoint: null,
+          verified_at: item.timestamp ? Math.floor(new Date(item.timestamp).getTime() / 1000) : 0,
+          status: 'verified'
+        }));
+        renderTransactions(items, true);
+        return true;
+      } catch (e) {
+        console.warn('Blockscout fallback also failed:', e);
+        return false;
+      }
+    }
+
+    // Render transaction rows
+    function renderTransactions(txs, isFallback) {
+      const loading = document.getElementById('tx-loading');
+      const empty = document.getElementById('tx-empty');
+      const rows = document.getElementById('tx-rows');
+      const note = document.getElementById('tx-fallback-note');
+
+      loading.style.display = 'none';
+
+      if (isFallback) {
+        note.style.display = 'block';
+      }
+
+      if (txs.length === 0) {
+        empty.style.display = 'block';
+        rows.innerHTML = '';
+        return;
+      }
+
+      empty.style.display = 'none';
+
+      // Detect new transactions
+      const newFirstHash = txs[0]?.tx_hash;
+      const isNew = lastTxHash !== null && newFirstHash !== lastTxHash;
+
+      if (isNew) {
+        playChime();
+        flashPulseDot();
+      }
+
+      lastTxHash = newFirstHash;
+
+      // Rebuild rows
+      rows.innerHTML = '';
+      txs.forEach(tx => {
+        rows.appendChild(buildTxRow(tx));
+      });
+    }
+
+    // Poll loop
+    async function pollTransactions() {
+      const ok = await fetchTransactions();
+      if (!ok) await fetchBlockscout();
+    }
+
+    // Start polling
+    pollTransactions();
+    setInterval(pollTransactions, 10_000);
   </script>
 
 </body>
