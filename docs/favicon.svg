@@ -1,4 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <rect width="32" height="32" rx="6" fill="#0d1117"/>
-  <text x="16" y="23" text-anchor="middle" font-family="monospace" font-weight="700" font-size="22" fill="#3fb950">P</text>
+  <!-- Left gate bar -->
+  <rect x="6" y="5" width="3" height="22" rx="1.5" fill="#e6edf3"/>
+  <!-- Right gate bar -->
+  <rect x="23" y="5" width="3" height="22" rx="1.5" fill="#e6edf3"/>
+  <!-- Arrow passing through -->
+  <path d="M11 16h13m0 0l-4-4m4 4l-4 4" stroke="#3fb950" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

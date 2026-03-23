@@ -30,6 +30,15 @@ body {
   font-size: 1.15rem;
   color: #e6edf3;
   text-decoration: none;
+  display: flex;
+  align-items: center;
+}
+
+.nav-logo {
+  height: 22px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 8px;
 }
 
 .site-nav .nav-wordmark:hover {
@@ -470,6 +479,16 @@ footer .footer-brand {
   font-family: 'JetBrains Mono', monospace;
   font-weight: 600;
   color: #e6edf3;
+  display: inline-flex;
+  align-items: center;
+}
+
+.footer-logo {
+  height: 16px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 6px;
+  opacity: 0.7;
 }
 
 /* Quickstart page */
