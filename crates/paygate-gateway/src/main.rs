@@ -214,9 +214,15 @@ async fn cmd_serve(config_path: &str) {
     let admin_app = admin::admin_router(state.clone());
 
     // Build main gateway router with verifier's gateway_handler + rate limiter middleware
+    let cors = tower_http::cors::CorsLayer::new()
+        .allow_origin(tower_http::cors::Any)
+        .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::OPTIONS])
+        .allow_headers(tower_http::cors::Any);
+
     let mut gateway_app = Router::new()
         .merge(admin::receipt_route())
         .fallback(gateway_handler)
+        .layer(cors)
         .layer(middleware::from_fn_with_state(
             state.clone(),
             rate_limit::rate_limit_middleware,
