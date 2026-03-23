@@ -134,28 +134,28 @@
       <h2>Your agent pays for itself.</h2>
       <p class="subtitle">It sees a 402, reads the price, pays on-chain, retries. You write zero payment code.</p>
       <div class="code-block" style="margin-top:1.5rem">
-        <pre><code>import { PayGateClient } from '@paygate/sdk';
+        <pre><code><span class="kw">import</span> { PayGateClient } <span class="kw">from</span> <span class="str">'@paygate/sdk'</span>;
 
-const client = new PayGateClient({ tempoClient });
+<span class="kw">const</span> client = <span class="kw">new</span> PayGateClient({ tempoClient });
 
-// That's it. Agent handles 402s automatically.
-const result = await client.fetch(
-  'https://api.example.com/v1/search',
-  { method: 'POST', body: JSON.stringify({ query: 'AI news' }) }
+<span class="comment">// That's it. Agent handles 402s automatically.</span>
+<span class="kw">const</span> result = <span class="kw">await</span> client.fetch(
+  <span class="str">'https://api.example.com/v1/search'</span>,
+  { method: <span class="str">'POST'</span>, body: JSON.stringify({ query: <span class="str">'AI news'</span> }) }
 );</code></pre>
       </div>
       <div class="code-block" style="margin-top:0.75rem;display:inline-block">
-        <pre><code>npm install @paygate/sdk</code></pre>
+        <pre><code><span class="prompt">$</span> npm install @paygate/sdk</code></pre>
       </div>
     </div>
   </section>
 
   <!-- THE CTA -->
   <section id="add-api" class="cta-section fade-in">
-    <div class="wrap" style="text-align:center">
+    <div class="wrap">
       <h2>You have an API.<br>Agents want to pay for it.</h2>
-      <p class="subtitle" style="margin:1rem auto;">Three commands. Your API starts earning from every agent that calls it.</p>
-      <div class="terminal" style="margin:1.5rem auto;text-align:left;">
+      <p class="subtitle" style="margin-top:1rem;">Three commands. Your API starts earning from every agent that calls it.</p>
+      <div class="terminal" style="margin-top:1.5rem;">
         <div class="terminal-bar">
           <span class="terminal-dot red"></span>
           <span class="terminal-dot yellow"></span>
@@ -166,7 +166,7 @@ const result = await client.fetch(
 <span class="prompt">$</span> npm start
 <span class="comment"># Your API is now earning money.</span></code></pre>
       </div>
-      <div class="btn-group" style="justify-content:center">
+      <div class="btn-group">
         <a href="quickstart.html" class="btn btn-primary">Get started</a>
         <a href="https://github.com/ssreeni1/paygate" class="btn btn-secondary">View source</a>
       </div>
