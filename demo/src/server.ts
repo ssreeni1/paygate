@@ -19,6 +19,24 @@ app.use(scrapeRouter);
 app.use(imageRouter);
 app.use(summarizeRouter);
 
+// RPC proxy — forwards JSON-RPC calls to Tempo for the gateway process
+// The Rust gateway can't reach rpc.moderato.tempo.xyz from some hosts (Railway EU),
+// but Node.js can. This proxy runs on localhost:3001/rpc and the gateway uses it.
+const TEMPO_RPC = process.env.TEMPO_RPC_URL || 'https://rpc.moderato.tempo.xyz';
+app.post('/rpc', async (req, res) => {
+  try {
+    const resp = await fetch(TEMPO_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+    });
+    const data = await resp.json();
+    res.json(data);
+  } catch (err: any) {
+    res.status(502).json({ jsonrpc: '2.0', error: { code: -32000, message: `RPC proxy error: ${err.message}` }, id: req.body?.id ?? null });
+  }
+});
+
 // Error handler (must be last)
 app.use(errorHandler);
 
