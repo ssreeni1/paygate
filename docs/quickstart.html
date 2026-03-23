@@ -44,14 +44,19 @@
 
         <div class="callout">
           <strong>TL;DR</strong> &mdash; Install the SDK and your agent handles payments automatically:
-          <pre><code>npm install @paygate/sdk</code></pre>
+          <div class="code-block">
+            <div class="code-lang">bash</div>
+            <pre><code>npm install @paygate/sdk</code></pre>
+          </div>
         </div>
 
         <h2>What's happening</h2>
         <p>The API you called is gated by PayGate. It requires a small stablecoin payment per request &mdash; no API key, no account, no monthly bill. Just pay and get your response.</p>
         <p>The 402 response tells you everything: the price, where to send it, and a <code>quote_id</code> that locks the price for 5 minutes.</p>
 
-        <pre><code>HTTP/1.1 402 Payment Required
+        <div class="code-block">
+          <div class="code-lang">http</div>
+          <pre><code>HTTP/1.1 402 Payment Required
 
 {
   "error": "payment_required",
@@ -64,6 +69,7 @@
     "quote_expires_at": "2026-03-19T12:00:00Z"
   }
 }</code></pre>
+        </div>
       </section>
 
       <hr class="section-divider">
@@ -74,10 +80,15 @@
         <p>The SDK handles the full 402 flow automatically: detect payment required, pay on-chain, retry with proof.</p>
 
         <h3>1. Install</h3>
-        <pre><code>npm install @paygate/sdk</code></pre>
+        <div class="code-block">
+          <div class="code-lang">bash</div>
+          <pre><code>npm install @paygate/sdk</code></pre>
+        </div>
 
         <h3>2. Create a client</h3>
-        <pre><code>import { PayGateClient } from '@paygate/sdk';
+        <div class="code-block">
+          <div class="code-lang">typescript</div>
+          <pre><code>import { PayGateClient } from '@paygate/sdk';
 import { createClient, http, publicActions, walletActions } from 'viem';
 import { Account, tempoActions } from 'viem/tempo';
 import { tempoModerato } from 'viem/chains';
@@ -94,10 +105,13 @@ const tempoClient = createClient({
   .extend(tempoActions());
 
 const client = new PayGateClient({ tempoClient });</code></pre>
+        </div>
 
         <h3>3. Make requests</h3>
         <p>Use it like <code>fetch()</code>. Payment happens transparently.</p>
-        <pre><code>const response = await client.fetch(
+        <div class="code-block">
+          <div class="code-lang">typescript</div>
+          <pre><code>const response = await client.fetch(
   'https://api.example.com/v1/search',
   {
     method: 'POST',
@@ -106,9 +120,12 @@ const client = new PayGateClient({ tempoClient });</code></pre>
 );
 
 const data = await response.json();</code></pre>
+        </div>
 
         <h3>4. Use as an agent tool</h3>
-        <pre><code>const searchTool = {
+        <div class="code-block">
+          <div class="code-lang">typescript</div>
+          <pre><code>const searchTool = {
   name: 'web_search',
   description: 'Search the web. Payment handled automatically.',
   execute: async ({ query }) => {
@@ -119,6 +136,7 @@ const data = await response.json();</code></pre>
     return res.json();
   },
 };</code></pre>
+        </div>
       </section>
 
       <hr class="section-divider">
@@ -128,15 +146,21 @@ const data = await response.json();</code></pre>
         <p>For testing, debugging, or languages without an SDK.</p>
 
         <h3>1. Get the 402</h3>
-        <pre><code>curl -s https://api.example.com/v1/search \
+        <div class="code-block">
+          <div class="code-lang">bash</div>
+          <pre><code>curl -s https://api.example.com/v1/search \
   -X POST -H "Content-Type: application/json" \
   -d '{"query": "AI news"}'</code></pre>
+        </div>
         <p>Note the <code>quote_id</code>, <code>amount</code>, <code>token</code>, and <code>recipient</code>.</p>
 
         <h3>2. Compute the memo</h3>
         <p>The payment needs a memo that binds it to your request:</p>
-        <pre><code>requestHash = keccak256(METHOD + " " + PATH + "\n" + BODY)
+        <div class="code-block">
+          <div class="code-lang">pseudocode</div>
+          <pre><code>requestHash = keccak256(METHOD + " " + PATH + "\n" + BODY)
 memo        = keccak256("paygate" + quoteId + requestHash)</code></pre>
+        </div>
 
         <h3>3. Send TIP-20 payment on Tempo</h3>
         <p>Call <code>transferWithMemo(to, amount, memo)</code> on the TIP-20 token contract:</p>
@@ -147,12 +171,15 @@ memo        = keccak256("paygate" + quoteId + requestHash)</code></pre>
         </table>
 
         <h3>4. Retry with proof</h3>
-        <pre><code>curl -s https://api.example.com/v1/search \
+        <div class="code-block">
+          <div class="code-lang">bash</div>
+          <pre><code>curl -s https://api.example.com/v1/search \
   -X POST -H "Content-Type: application/json" \
   -H "X-Payment-Tx: 0xYOUR_TX_HASH" \
   -H "X-Payment-Payer: 0xYOUR_WALLET" \
   -H "X-Payment-Quote-Id: qt_a1b2c3d4" \
   -d '{"query": "AI news"}'</code></pre>
+        </div>
         <p>PayGate verifies the payment on-chain (under 100ms) and proxies your request.</p>
       </section>
 
@@ -189,10 +216,13 @@ memo        = keccak256("paygate" + quoteId + requestHash)</code></pre>
         </table>
 
         <h3>Get testnet tokens</h3>
-        <pre><code>curl -X POST https://rpc.moderato.tempo.xyz \
+        <div class="code-block">
+          <div class="code-lang">bash</div>
+          <pre><code>curl -X POST https://rpc.moderato.tempo.xyz \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tempo_fundAddress",
        "params":["YOUR_ADDRESS"],"id":1}'</code></pre>
+        </div>
       </section>
 
       <hr class="section-divider">
@@ -200,9 +230,12 @@ memo        = keccak256("paygate" + quoteId + requestHash)</code></pre>
       <section id="provider">
         <h2>Run your own PayGate</h2>
         <p>Wrap your API in three commands:</p>
-        <pre><code>npx create-paygate my-api
+        <div class="code-block">
+          <div class="code-lang">bash</div>
+          <pre><code>npx create-paygate my-api
 cd my-api
 npm start</code></pre>
+        </div>
         <p>Edit <code>paygate.toml</code> to set your price and wallet address. Deploy anywhere that runs Docker.</p>
         <p><a href="https://github.com/ssreeni1/paygate">Full documentation on GitHub &rarr;</a></p>
       </section>
@@ -222,6 +255,24 @@ npm start</code></pre>
       </div>
     </div>
   </footer>
+
+  <script>
+    // Scroll-active sidebar highlighting
+    const sections = document.querySelectorAll('main section[id]');
+    const navLinks = document.querySelectorAll('.sidebar-nav a');
+
+    const sectionObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          navLinks.forEach(link => link.classList.remove('active'));
+          const activeLink = document.querySelector(`.sidebar-nav a[href="#${entry.target.id}"]`);
+          if (activeLink) activeLink.classList.add('active');
+        }
+      });
+    }, { rootMargin: '-20% 0px -60% 0px' });
+
+    sections.forEach(section => sectionObserver.observe(section));
+  </script>
 
 </body>
 </html>

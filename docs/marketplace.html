@@ -31,28 +31,18 @@
   <header class="dark">
     <div class="wrap">
       <h1>PayGate Marketplace</h1>
-      <p class="subtitle">Live APIs on Tempo testnet. Real payments. Try them below.</p>
+      <p class="subtitle">Four APIs. Real on-chain payments. Click "Try it" to see a live 402.</p>
     </div>
   </header>
 
   <!-- DEMO BANNER + STATS -->
   <section class="marketplace-stats-section fade-in">
     <div class="wrap">
-      <div class="demo-banner">
-        Demo mode &mdash; mock responses, real on-chain payments.
-      </div>
-      <div class="marketplace-stats-bar">
-        <div class="marketplace-stat">
-          <span class="marketplace-stat-value" id="stat-total">--</span>
-          <span class="marketplace-stat-label">APIs available</span>
-        </div>
-        <div class="marketplace-stat">
-          <span class="marketplace-stat-value" id="stat-mode">DEMO</span>
-          <span class="marketplace-stat-label">mode</span>
-        </div>
-        <div class="marketplace-stat">
-          <a href="quickstart.html" class="marketplace-stat-link">Read the quickstart &rarr;</a>
-        </div>
+      <div class="mp-stats-bar">
+        <span class="mp-stat"><strong style="color:#3fb950">4</strong> APIs</span>
+        <span class="mp-stat"><strong style="color:#f0883e">DEMO</strong> mode</span>
+        <span class="mp-stat-note">Mock responses, real payments</span>
+        <a href="quickstart.html" class="mp-stat-link">Quickstart &rarr;</a>
       </div>
     </div>
   </section>
@@ -142,7 +132,7 @@
   -d '${body}'`;
     }
 
-    function buildCard(api, index) {
+    function buildCard(api, index, isCheapest) {
       const color = CARD_COLORS[index % CARD_COLORS.length];
       const name = friendlyName(api);
       const isLive = api.mode === 'live';
@@ -151,11 +141,12 @@
       const curlCmd = buildCurlCommand(api);
       const cardId = `card-${index}`;
       const panelId = `panel-${index}`;
+      const cheapestBadge = isCheapest ? '<span class="mp-badge mp-badge-cheapest">CHEAPEST</span>' : '';
 
       return `
         <div class="api-card mp-card" style="border-left: 3px solid ${color}">
           <div class="mp-card-header">
-            <h3>${name}</h3>
+            <h3>${name}${cheapestBadge}</h3>
             <span class="mp-badge ${badgeClass}">${badgeText}</span>
           </div>
           <div class="api-price">$${api.price}<span class="api-price-unit">/req</span></div>
@@ -261,11 +252,17 @@
         errDiv.innerHTML = 'Live data unavailable &mdash; showing cached catalog. The APIs are hosted on Railway and may take a moment to wake up.';
       }
 
-      document.getElementById('stat-total').textContent = apis.length;
+      // Find cheapest API index
+      let cheapestIndex = 0;
+      let cheapestPrice = parseFloat(apis[0].price);
+      apis.forEach((api, i) => {
+        const p = parseFloat(api.price);
+        if (p < cheapestPrice) { cheapestPrice = p; cheapestIndex = i; }
+      });
 
       let html = '';
       apis.forEach((api, i) => {
-        html += buildCard(api, i);
+        html += buildCard(api, i, i === cheapestIndex);
       });
       grid.innerHTML = html;
 
