@@ -2,23 +2,25 @@
 
 ## Blocking for Production
 
-### Quickstart documentation for payment flow
-- **What:** Write the page at `ssreeni1.github.io/paygate/quickstart#paying` — the URL linked from every 402 response's `help_url` field.
-- **Why:** Every 402 response includes `"help_url": "https://ssreeni1.github.io/paygate/quickstart#paying"`. Without actual docs at that URL, developers hit a dead link at the exact moment they need help. This is a pre-launch requirement.
-- **Pros:** Completes the DX loop; developers can self-serve from the 402 response.
-- **Cons:** Requires a docs site (GitHub Pages, Vercel, etc.) — minimal setup.
-- **Context:** The 402 JSON body format was finalized in the design review (DESIGN-REVIEW.md §4). The page should cover: what 402 means, how to send a TIP-20 payment, how to retry with X-Payment-Tx header, and how to use the SDK for auto-pay.
-- **Depends on:** Finalized 402 response format (done), working payment flow.
-
-### Deploy docs site for help_url
-- **What:** Set up GitHub Pages at `ssreeni1.github.io/paygate` and publish the quickstart page. The quickstart content is partially covered by README.md now, but the `help_url` in 402 responses points to `https://ssreeni1.github.io/paygate/quickstart#paying` which must be a live URL.
-- **Why:** Every 402 response links to this URL. Dead links at the moment a developer needs help is a terrible first impression.
-- **Pros:** Completes the DX loop from 402 → docs → payment → success.
-- **Cons:** Minimal setup with GitHub Pages (no custom DNS needed — using `ssreeni1.github.io/paygate`).
-- **Context:** README.md now has the "How it works" and SDK sections that can be adapted for the quickstart page. The 402 JSON format is finalized in DESIGN-REVIEW.md §4.
-- **Depends on:** Quickstart documentation (above).
+(none — all blockers resolved)
 
 ## Non-blocking
+
+### Split main.rs into modules
+- **What:** Extract CLI commands, gateway handler, and tests from main.rs (~1900 LOC) into separate files.
+- **Why:** main.rs does too much — CLI arg parsing, gateway handler, middleware wiring, all test functions. Hard to navigate, will get worse with Wave 2 features.
+- **Context:** Retro flagged this. Extract `cli/serve.rs`, `cli/init.rs`, `cli/revenue.rs`, etc.
+- **Depends on:** Nothing.
+
+### Publish create-paygate to npm
+- **What:** Publish the `packages/create-paygate` package to npm so `npx create-paygate` works.
+- **Why:** The landing page and docs tell people to run `npx create-paygate` but it doesn't exist on npm yet.
+- **Depends on:** npm account setup.
+
+### Record demo video
+- **What:** 30-second terminal recording of an agent using the marketplace — discover, pay, get results.
+- **Why:** The launch content for Twitter/HN. The landing page has a hero section ready for video embed.
+- **Depends on:** Nothing (marketplace is live with real payments).
 
 ### Dashboard design specification (v0.3)
 - **What:** Full design specification for the React revenue dashboard — screens, data visualization, interactions, responsive behavior. Run `/design-consultation` before implementation.
@@ -48,3 +50,12 @@
 
 ### Verify Tempo SDK APIs before testnet integration
 - **Status:** DONE — full report at `docs/designs/tempo-sdk-verification.md`, testnet E2E passed.
+
+### Quickstart documentation for payment flow
+- **Status:** DONE v0.2.0 — `quickstart.html` live at `ssreeni1.github.io/paygate/quickstart` with sidebar nav, SDK guide, manual curl guide, testnet setup.
+
+### Deploy docs site for help_url
+- **Status:** DONE v0.2.0 — GitHub Pages auto-deploys from `docs/` directory. All 402 `help_url` links resolve.
+
+### Railway RPC connectivity
+- **Status:** DONE v0.3.0 — Node.js RPC proxy at `localhost:3001/rpc` relays Tempo calls for the Rust gateway. 6 real payments verified on deployed Railway instance.
