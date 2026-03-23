@@ -624,4 +624,122 @@ mod tests {
 
         let _ = std::fs::remove_file(&path);
     }
+
+    // T4: Recent transactions respects limit
+    #[test]
+    fn test_recent_transactions_respects_limit() {
+        let (path, reader) = setup_test_db();
+        for i in 0..5 {
+            insert_payment(
+                &path,
+                &format!("lim{i}"),
+                &format!("0xccc{i}"),
+                1000,
+                100 + i,
+            );
+        }
+
+        let txs = reader.recent_transactions(2, 0).unwrap();
+        assert_eq!(txs.len(), 2);
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T5: Revenue summary filters by time
+    #[test]
+    fn test_revenue_summary_filters_by_time() {
+        let (path, reader) = setup_test_db();
+
+        // Insert request_log entries at different times
+        let conn = Connection::open(&path).unwrap();
+        let old_ts = 1000i64;
+        let recent_ts = 9000i64;
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at)
+             VALUES ('p1', 'POST /v1/chat', '0xaaa', 500, ?)",
+            params![old_ts],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at)
+             VALUES ('p2', 'POST /v1/chat', '0xaaa', 1500, ?)",
+            params![recent_ts],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at)
+             VALUES ('p3', 'POST /v1/chat', '0xaaa', 2000, ?)",
+            params![recent_ts + 1],
+        ).unwrap();
+        drop(conn);
+
+        // Only get entries since timestamp 5000 — should exclude old_ts=1000
+        let (total_amount, count) = reader.revenue_summary(5000).unwrap();
+        assert_eq!(count, 2);
+        assert_eq!(total_amount, 3500); // 1500 + 2000
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T6: Insert and retrieve payment round-trip
+    #[tokio::test]
+    async fn test_insert_and_retrieve_payment() {
+        let path = format!("/tmp/paygate_db_test_{}.db", uuid::Uuid::new_v4());
+        let (reader, writer) = init_db(&path).unwrap();
+
+        let record = PaymentRecord {
+            id: "pay_roundtrip".to_string(),
+            tx_hash: "0xdeadbeef".to_string(),
+            payer_address: "0x9E2b000000000000000000000000000000000001".to_string(),
+            amount: 42000,
+            token_address: "0x20c0000000000000000000000000000000000000".to_string(),
+            endpoint: "POST /v1/echo".to_string(),
+            request_hash: Some("0xabcd".to_string()),
+            quote_id: Some("qt_rt".to_string()),
+            block_number: 999,
+            verified_at: 123456,
+            status: "verified".to_string(),
+        };
+
+        writer.insert_payment(record).await.unwrap();
+        // Small delay for writer task to flush
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        let fetched = reader.get_payment("0xdeadbeef").unwrap().expect("payment should exist");
+        assert_eq!(fetched.id, "pay_roundtrip");
+        assert_eq!(fetched.tx_hash, "0xdeadbeef");
+        assert_eq!(fetched.amount, 42000);
+        assert_eq!(fetched.block_number, 999);
+        assert_eq!(fetched.verified_at, 123456);
+        assert_eq!(fetched.quote_id, Some("qt_rt".to_string()));
+
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T7: is_tx_consumed returns true after insert
+    #[tokio::test]
+    async fn test_is_tx_consumed() {
+        let path = format!("/tmp/paygate_db_test_{}.db", uuid::Uuid::new_v4());
+        let (reader, writer) = init_db(&path).unwrap();
+
+        assert!(!reader.is_tx_consumed("0xnotexist").unwrap());
+
+        let record = PaymentRecord {
+            id: "pay_consumed".to_string(),
+            tx_hash: "0xconsumed".to_string(),
+            payer_address: "0x9E2b000000000000000000000000000000000001".to_string(),
+            amount: 1000,
+            token_address: "0x20c0000000000000000000000000000000000000".to_string(),
+            endpoint: "POST /v1/echo".to_string(),
+            request_hash: None,
+            quote_id: None,
+            block_number: 1,
+            verified_at: 100,
+            status: "verified".to_string(),
+        };
+        writer.insert_payment(record).await.unwrap();
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+        assert!(reader.is_tx_consumed("0xconsumed").unwrap());
+
+        let _ = std::fs::remove_file(&path);
+    }
 }
