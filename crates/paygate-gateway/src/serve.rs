@@ -339,14 +339,15 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
                 let req = Request::from_parts(parts, Body::from(body_bytes));
                 return match crate::proxy::forward_request(&state, req, "", deduction.amount_deducted, &endpoint).await {
                     Ok(mut resp) => {
-                        // no_charge_on_5xx refund
-                        if resp.status().is_server_error() && config.is_no_charge_on_5xx(&endpoint) {
+                        // no_charge_on_5xx refund — skip dynamic pricing if refunded
+                        let refunded_5xx = if resp.status().is_server_error() && config.is_no_charge_on_5xx(&endpoint) {
                             let _ = state.db_writer.refund_session_balance(&deduction.session_id, deduction.amount_deducted).await;
                             resp.headers_mut().insert("X-Payment-Refunded", HeaderValue::from_static("true"));
-                        }
+                            true
+                        } else { false };
 
-                        // Dynamic pricing adjustment (session auth only)
-                        let final_cost = if config.pricing.dynamic.enabled {
+                        // Dynamic pricing adjustment (session auth only, skip if already refunded)
+                        let final_cost = if !refunded_5xx && config.pricing.dynamic.enabled {
                             if let Some(token_count_header) = resp.headers().get(&config.pricing.dynamic.header_source) {
                                 if let Ok(token_count_str) = token_count_header.to_str() {
                                     if let Ok(token_count) = token_count_str.parse::<u64>() {

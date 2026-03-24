@@ -411,8 +411,11 @@ pub async fn verify_and_deduct(
     }
 
     // 4. HMAC verification (constant-time via hmac crate)
+    // Strip ssec_ prefix and hex-decode to get raw key bytes (must match TS SDK)
+    let raw_secret = session.secret.strip_prefix("ssec_").unwrap_or(&session.secret);
+    let key_bytes = hex::decode(raw_secret).map_err(|_| SessionError::InvalidSignature)?;
     let rh_hex = format!("0x{}", hex::encode(request_hash.as_slice()));
-    let mut mac = HmacSha256::new_from_slice(session.secret.as_bytes())
+    let mut mac = HmacSha256::new_from_slice(&key_bytes)
         .map_err(|_| SessionError::InvalidSignature)?;
     mac.update(rh_hex.as_bytes());
     mac.update(timestamp_str.as_bytes());
@@ -684,9 +687,11 @@ mod tests {
         let rh = B256::repeat_byte(0xAB);
         let ts = chrono::Utc::now().timestamp().to_string();
 
-        // Compute valid HMAC
+        // Compute valid HMAC (must match production: strip ssec_ prefix, hex-decode key)
+        let raw_secret = session_secret.strip_prefix("ssec_").unwrap();
+        let key_bytes = hex::decode(raw_secret).unwrap();
         let rh_hex = format!("0x{}", hex::encode(rh.as_slice()));
-        let mut mac = HmacSha256::new_from_slice(session_secret.as_bytes()).unwrap();
+        let mut mac = HmacSha256::new_from_slice(&key_bytes).unwrap();
         mac.update(rh_hex.as_bytes());
         mac.update(ts.as_bytes());
         let sig = hex::encode(mac.finalize().into_bytes());
@@ -772,8 +777,10 @@ mod tests {
         let rh = B256::repeat_byte(0xEE);
         let ts = chrono::Utc::now().timestamp().to_string();
 
+        let raw_secret = session_secret.strip_prefix("ssec_").unwrap();
+        let key_bytes = hex::decode(raw_secret).unwrap();
         let rh_hex = format!("0x{}", hex::encode(rh.as_slice()));
-        let mut mac = HmacSha256::new_from_slice(session_secret.as_bytes()).unwrap();
+        let mut mac = HmacSha256::new_from_slice(&key_bytes).unwrap();
         mac.update(rh_hex.as_bytes());
         mac.update(ts.as_bytes());
         let sig = hex::encode(mac.finalize().into_bytes());

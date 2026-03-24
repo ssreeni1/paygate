@@ -744,7 +744,7 @@ fn flush_batch(conn: &Connection, batch: &mut Vec<WriteCommand>) {
             }
             WriteCommand::RefundSessionBalance { id, amount } => {
                 let _ = conn.execute(
-                    "UPDATE sessions SET balance = balance + ?, requests_made = MAX(requests_made - 1, 0)
+                    "UPDATE sessions SET balance = MIN(balance + ?, deposit_amount), requests_made = MAX(requests_made - 1, 0)
                      WHERE id = ?",
                     params![amount as i64, id],
                 );
