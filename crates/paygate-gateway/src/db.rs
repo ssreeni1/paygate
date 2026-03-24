@@ -1,3 +1,4 @@
+use chrono::Datelike;
 use paygate_common::types::{BaseUnits, PaymentRecord, Quote};
 use rusqlite::{Connection, params};
 use thiserror::Error;
@@ -40,6 +41,7 @@ pub struct FullSessionRecord {
     pub created_at: i64,
     pub expires_at: i64,
     pub status: String,
+    pub agent_name: String,
 }
 
 /// Nonce record for session creation.
@@ -92,6 +94,7 @@ pub enum WriteCommand {
         amount_charged: BaseUnits,
         upstream_status: Option<i32>,
         upstream_latency_ms: Option<i64>,
+        agent_name: String,
     },
 }
 
@@ -345,7 +348,8 @@ impl DbReader {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
             "SELECT id, secret, payer_address, deposit_tx, nonce, deposit_amount, balance,
-                    rate_per_request, requests_made, created_at, expires_at, status
+                    rate_per_request, requests_made, created_at, expires_at, status,
+                    COALESCE(agent_name, '') as agent_name
              FROM sessions WHERE id = ?",
         )?;
         let result = stmt.query_row(params![id], |row| {
@@ -362,6 +366,7 @@ impl DbReader {
                 created_at: row.get(9)?,
                 expires_at: row.get(10)?,
                 status: row.get(11)?,
+                agent_name: row.get(12)?,
             })
         });
         match result {
@@ -377,7 +382,8 @@ impl DbReader {
         let now = chrono::Utc::now().timestamp();
         let mut stmt = conn.prepare(
             "SELECT id, secret, payer_address, deposit_tx, nonce, deposit_amount, balance,
-                    rate_per_request, requests_made, created_at, expires_at, status
+                    rate_per_request, requests_made, created_at, expires_at, status,
+                    COALESCE(agent_name, '') as agent_name
              FROM sessions WHERE payer_address = ? AND status = 'active' AND expires_at > ?
              ORDER BY created_at DESC",
         )?;
@@ -395,6 +401,7 @@ impl DbReader {
                 created_at: row.get(9)?,
                 expires_at: row.get(10)?,
                 status: row.get(11)?,
+                agent_name: row.get(12)?,
             })
         })?;
         let mut result = Vec::new();
@@ -415,6 +422,62 @@ impl DbReader {
         )?;
         Ok(count as u64)
     }
+
+    /// Total spend for a payer since the start of the current UTC day.
+    pub fn daily_spend_for_payer(&self, payer: &str) -> Result<u64, DbError> {
+        let conn = self.conn()?;
+        let day_start = utc_day_start();
+        let total: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount_charged), 0) FROM request_log WHERE payer_address = ? AND created_at >= ?",
+            params![payer, day_start],
+            |row| row.get(0),
+        )?;
+        Ok(total as u64)
+    }
+
+    /// Total spend for a payer since the start of the current UTC month.
+    pub fn monthly_spend_for_payer(&self, payer: &str) -> Result<u64, DbError> {
+        let conn = self.conn()?;
+        let month_start = utc_month_start();
+        let total: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount_charged), 0) FROM request_log WHERE payer_address = ? AND created_at >= ?",
+            params![payer, month_start],
+            |row| row.get(0),
+        )?;
+        Ok(total as u64)
+    }
+
+    /// Total spend for an agent since the start of the current UTC day.
+    pub fn daily_spend_for_agent(&self, agent_name: &str) -> Result<u64, DbError> {
+        let conn = self.conn()?;
+        let day_start = utc_day_start();
+        let total: i64 = conn.query_row(
+            "SELECT COALESCE(SUM(amount_charged), 0) FROM request_log WHERE agent_name = ? AND created_at >= ?",
+            params![agent_name, day_start],
+            |row| row.get(0),
+        )?;
+        Ok(total as u64)
+    }
+}
+
+/// Returns the Unix timestamp for the start of the current UTC day (midnight).
+pub fn utc_day_start() -> i64 {
+    let now = chrono::Utc::now();
+    now.date_naive().and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc()
+        .timestamp()
+}
+
+/// Returns the Unix timestamp for the start of the current UTC month (1st, midnight).
+pub fn utc_month_start() -> i64 {
+    let now = chrono::Utc::now();
+    chrono::NaiveDate::from_ymd_opt(now.year(), now.month(), 1)
+        .unwrap()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc()
+        .timestamp()
 }
 
 /// Writer task handle. Send commands through this.
@@ -471,6 +534,7 @@ impl DbWriter {
         amount_charged: BaseUnits,
         upstream_status: Option<i32>,
         upstream_latency_ms: Option<i64>,
+        agent_name: String,
     ) -> Result<(), DbError> {
         self.tx
             .try_send(WriteCommand::InsertRequestLog {
@@ -481,6 +545,7 @@ impl DbWriter {
                 amount_charged,
                 upstream_status,
                 upstream_latency_ms,
+                agent_name,
             })
             .map_err(|e| match e {
                 mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
@@ -558,6 +623,17 @@ pub fn init_db(path: &str) -> Result<(DbReader, DbWriter), DbError> {
     // Create schema
     let conn = Connection::open(path)?;
     conn.execute_batch(include_str!("../../../schema.sql"))?;
+
+    // Migrations: add agent_name columns (idempotent — ignore duplicate column errors)
+    let _ = conn.execute_batch("ALTER TABLE request_log ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
+    let _ = conn.execute_batch("ALTER TABLE sessions ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
+
+    // Indexes for spend queries
+    let _ = conn.execute_batch(
+        "CREATE INDEX IF NOT EXISTS idx_request_log_payer_created ON request_log(payer_address, created_at);
+         CREATE INDEX IF NOT EXISTS idx_request_log_agent_created ON request_log(agent_name, created_at);"
+    );
+
     drop(conn);
 
     let reader = DbReader::new(path);
@@ -698,14 +774,15 @@ fn flush_batch(conn: &Connection, batch: &mut Vec<WriteCommand>) {
                     conn.execute(
                         "INSERT INTO sessions (id, secret, payer_address, deposit_tx, nonce,
                          deposit_amount, balance, rate_per_request, requests_made,
-                         created_at, expires_at, status)
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                         created_at, expires_at, status, agent_name)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         params![
                             record.id, record.secret, record.payer_address,
                             record.deposit_tx, record.nonce,
                             record.deposit_amount as i64, record.balance as i64,
                             record.rate_per_request as i64, record.requests_made as i64,
                             record.created_at, record.expires_at, record.status,
+                            record.agent_name,
                         ],
                     ).map_err(|e| {
                         let _ = conn.execute_batch("ROLLBACK TO create_session");
@@ -757,12 +834,13 @@ fn flush_batch(conn: &Connection, batch: &mut Vec<WriteCommand>) {
                 amount_charged,
                 upstream_status,
                 upstream_latency_ms,
+                agent_name,
             } => {
                 let now = chrono::Utc::now().timestamp();
                 let _ = conn.execute(
                     "INSERT INTO request_log (payment_id, session_id, endpoint, payer_address,
-                     amount_charged, upstream_status, upstream_latency_ms, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                     amount_charged, upstream_status, upstream_latency_ms, created_at, agent_name)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     params![
                         payment_id,
                         session_id,
@@ -772,6 +850,7 @@ fn flush_batch(conn: &Connection, batch: &mut Vec<WriteCommand>) {
                         upstream_status,
                         upstream_latency_ms,
                         now,
+                        agent_name,
                     ],
                 );
             }
@@ -1016,5 +1095,95 @@ mod tests {
         assert!(reader.is_tx_consumed("0xconsumed").unwrap());
 
         let _ = std::fs::remove_file(&path);
+    }
+
+    // T10: daily_spend_for_payer returns correct sum
+    #[test]
+    fn test_daily_spend_for_payer() {
+        let (path, reader) = setup_test_db();
+        // Run ALTER TABLE migration like init_db does
+        let conn = Connection::open(&path).unwrap();
+        let _ = conn.execute_batch("ALTER TABLE request_log ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
+        let day_start = super::utc_day_start();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p1', 'POST /v1/chat', '0xpayer1', 3000, ?, '')",
+            params![day_start + 10],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p2', 'POST /v1/chat', '0xpayer1', 2000, ?, '')",
+            params![day_start + 20],
+        ).unwrap();
+        // Old entry from yesterday — should not count
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p3', 'POST /v1/chat', '0xpayer1', 9999, ?, '')",
+            params![day_start - 100],
+        ).unwrap();
+        drop(conn);
+
+        let total = reader.daily_spend_for_payer("0xpayer1").unwrap();
+        assert_eq!(total, 5000);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T11: monthly_spend_for_payer returns correct sum
+    #[test]
+    fn test_monthly_spend_for_payer() {
+        let (path, reader) = setup_test_db();
+        let conn = Connection::open(&path).unwrap();
+        let _ = conn.execute_batch("ALTER TABLE request_log ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
+        let month_start = super::utc_month_start();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p1', 'POST /v1/chat', '0xpayer1', 10000, ?, '')",
+            params![month_start + 100],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p2', 'POST /v1/chat', '0xpayer1', 5000, ?, '')",
+            params![month_start + 200],
+        ).unwrap();
+        drop(conn);
+
+        let total = reader.monthly_spend_for_payer("0xpayer1").unwrap();
+        assert_eq!(total, 15000);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T12: daily_spend_for_agent returns correct sum
+    #[test]
+    fn test_daily_spend_for_agent() {
+        let (path, reader) = setup_test_db();
+        let conn = Connection::open(&path).unwrap();
+        let _ = conn.execute_batch("ALTER TABLE request_log ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
+        let day_start = super::utc_day_start();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p1', 'POST /v1/chat', '0xpayer1', 4000, ?, 'my-agent')",
+            params![day_start + 10],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO request_log (payment_id, endpoint, payer_address, amount_charged, created_at, agent_name)
+             VALUES ('p2', 'POST /v1/chat', '0xpayer2', 6000, ?, 'my-agent')",
+            params![day_start + 20],
+        ).unwrap();
+        drop(conn);
+
+        let total = reader.daily_spend_for_agent("my-agent").unwrap();
+        assert_eq!(total, 10000);
+        let _ = std::fs::remove_file(&path);
+    }
+
+    // T13: utc_day_start and utc_month_start return sane values
+    #[test]
+    fn test_utc_timestamp_helpers() {
+        let day = super::utc_day_start();
+        let month = super::utc_month_start();
+        let now = chrono::Utc::now().timestamp();
+        assert!(day <= now);
+        assert!(month <= now);
+        assert!(month <= day);
     }
 }
