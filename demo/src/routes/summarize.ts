@@ -31,6 +31,8 @@ router.post('/v1/summarize', async (req, res, next) => {
       const inputTokens = Math.ceil(text.length / 4); // rough approximation
       const outputTokens = Math.ceil(summary.length / 4);
 
+      const tokenCount = Math.ceil(summary.length / 4);
+      res.setHeader('X-Token-Count', tokenCount.toString());
       console.log(`[summarize] input_chars=${text.length} mode=MOCK status=200`);
       res.json({
         summary,
@@ -76,6 +78,8 @@ router.post('/v1/summarize', async (req, res, next) => {
       .map(c => c.text)
       .join('\n');
 
+    const tokenCount = data.usage.output_tokens;
+    res.setHeader('X-Token-Count', tokenCount.toString());
     const elapsed = Date.now() - start;
     console.log(`[summarize] input_chars=${text.length} upstream_ms=${elapsed} status=200`);
 

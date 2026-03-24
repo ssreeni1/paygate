@@ -69,6 +69,8 @@ router.post('/v1/search', async (req, res, next) => {
     // Mock mode when BRAVE_API_KEY is not set
     if (!BRAVE_API_KEY) {
       const results = getMockResults(query, count);
+      const tokenCount = results.length * 50;
+      res.setHeader('X-Token-Count', tokenCount.toString());
       console.log(`[search] query="${query}" mode=MOCK status=200`);
       res.json({
         results,
@@ -105,6 +107,8 @@ router.post('/v1/search', async (req, res, next) => {
       age: r.age ?? null,
     }));
 
+    const tokenCount = results.length * 50;
+    res.setHeader('X-Token-Count', tokenCount.toString());
     const elapsed = Date.now() - start;
     console.log(`[search] query="${query}" upstream_ms=${elapsed} status=200`);
 

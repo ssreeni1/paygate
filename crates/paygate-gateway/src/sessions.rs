@@ -7,7 +7,7 @@ use alloy_primitives::{Address, B256};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use serde_json::json;
-use tracing::{info, warn};
+use tracing::{error, info, warn};
 
 use crate::config::parse_price_to_base_units;
 use crate::db::FullSessionRecord;
@@ -445,6 +445,54 @@ pub async fn verify_and_deduct(
     })
 }
 
+/// Deduct additional amount from session balance (used for dynamic pricing adjustment).
+pub async fn deduct_additional(state: &AppState, session_id: &str, amount: u64) -> Result<bool, crate::db::DbError> {
+    state.db_writer.deduct_session_balance(session_id, amount).await
+}
+
+// ─── GET /paygate/sessions ───────────────────────────────────────────────
+
+pub async fn handle_get_sessions(
+    State(state): State<AppState>,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let payer = match params.get("payer") {
+        Some(p) if !p.is_empty() => p,
+        _ => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "payer_required",
+                "message": "Query parameter 'payer' is required"
+            }))).into_response();
+        }
+    };
+
+    let sessions = match state.db_reader.list_sessions_for_payer(payer) {
+        Ok(s) => s,
+        Err(e) => {
+            error!(error = %e, payer = %payer, "failed to list sessions");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "internal error"}))).into_response();
+        }
+    };
+
+    let active: Vec<_> = sessions.into_iter().filter(|s| s.status == "active").collect();
+
+    let session_json: Vec<serde_json::Value> = active.iter().map(|s| {
+        json!({
+            "sessionId": s.id,
+            "balance": format!("{:.6}", s.balance as f64 / 1_000_000.0),
+            "ratePerRequest": format!("{:.6}", s.rate_per_request as f64 / 1_000_000.0),
+            "requestsMade": s.requests_made,
+            "expiresAt": chrono::DateTime::from_timestamp(s.expires_at, 0)
+                .map(|d| d.to_rfc3339()).unwrap_or_default(),
+            "status": s.status,
+        })
+    }).collect();
+
+    Json(json!({
+        "sessions": session_json,
+    })).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -774,5 +822,113 @@ mod tests {
         let config = test_config();
         assert!(config.is_no_charge_on_5xx("POST /v1/summarize"));
         assert!(!config.is_no_charge_on_5xx("POST /v1/search"));
+    }
+
+    // Test 11: compute_cost unit test
+    #[test]
+    fn test_compute_cost() {
+        use crate::config::DynamicPricingConfig;
+
+        let dpc = DynamicPricingConfig {
+            enabled: true,
+            formula: "token".into(),
+            base_cost_per_token: "0.00001".into(),
+            spread_per_token: "0.000005".into(),
+            header_source: "X-Token-Count".into(),
+        };
+
+        // 100 tokens * 0.000015/token = 0.0015 USD = 1500 base units
+        assert_eq!(dpc.compute_cost(100), 1500);
+
+        // 5000 tokens * 0.000015/token = 0.075 USD = 75000 base units
+        assert_eq!(dpc.compute_cost(5000), 75000);
+
+        // 0 tokens = 0
+        assert_eq!(dpc.compute_cost(0), 0);
+
+        // 1 token = 15 base units
+        assert_eq!(dpc.compute_cost(1), 15);
+    }
+
+    // Test 12: compute_cost with unparseable values falls back to 0
+    #[test]
+    fn test_compute_cost_invalid_config() {
+        use crate::config::DynamicPricingConfig;
+
+        let dpc = DynamicPricingConfig {
+            enabled: true,
+            formula: "token".into(),
+            base_cost_per_token: "not_a_number".into(),
+            spread_per_token: "".into(),
+            header_source: "X-Token-Count".into(),
+        };
+
+        assert_eq!(dpc.compute_cost(100), 0);
+    }
+
+    // Test 13: deduct_additional helper
+    #[tokio::test]
+    async fn test_deduct_additional() {
+        let (state, db_path) = test_state().await;
+
+        let session_id = "sess_test_deduct_add";
+        let secret = "ssec_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+        let payer = "0x9E2b000000000000000000000000000000000001";
+        let future = chrono::Utc::now().timestamp() + 86400;
+        insert_session(&db_path, session_id, secret, payer, 50000, future);
+
+        // Deduct additional 5000
+        let result = deduct_additional(&state, session_id, 5000).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap()); // should succeed
+
+        // Verify balance decreased
+        let session = state.db_reader.get_session(session_id).unwrap().unwrap();
+        assert_eq!(session.balance, 45000);
+    }
+
+    // Test 14: list_sessions_for_payer
+    #[test]
+    fn test_list_sessions_for_payer() {
+        let db_path = format!("/tmp/paygate_sess_test_{}.db", uuid::Uuid::new_v4());
+        let conn = Connection::open(&db_path).unwrap();
+        conn.execute_batch(include_str!("../../../schema.sql")).unwrap();
+
+        let payer = "0x9E2b000000000000000000000000000000000001";
+        let other = "0x1111000000000000000000000000000000000002";
+        let now = chrono::Utc::now().timestamp();
+        let future = now + 86400;
+
+        // Insert 2 sessions for our payer, 1 for another
+        conn.execute(
+            "INSERT INTO sessions (id, secret, payer_address, deposit_tx, nonce,
+             deposit_amount, balance, rate_per_request, requests_made,
+             created_at, expires_at, status)
+             VALUES ('sess_a', 'sec', ?1, 'tx1', 'n1', 50000, 30000, 1000, 5, ?2, ?3, 'active')",
+            params![payer, now, future],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, secret, payer_address, deposit_tx, nonce,
+             deposit_amount, balance, rate_per_request, requests_made,
+             created_at, expires_at, status)
+             VALUES ('sess_b', 'sec', ?1, 'tx2', 'n2', 50000, 20000, 1000, 10, ?2, ?3, 'active')",
+            params![payer, now, future],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO sessions (id, secret, payer_address, deposit_tx, nonce,
+             deposit_amount, balance, rate_per_request, requests_made,
+             created_at, expires_at, status)
+             VALUES ('sess_c', 'sec', ?1, 'tx3', 'n3', 50000, 40000, 1000, 2, ?2, ?3, 'active')",
+            params![other, now, future],
+        ).unwrap();
+        drop(conn);
+
+        let reader = crate::db::DbReader::new(&db_path);
+        let sessions = reader.list_sessions_for_payer(payer).unwrap();
+        assert_eq!(sessions.len(), 2);
+        // Should not include the other payer's session
+        assert!(sessions.iter().all(|s| s.payer_address == payer));
+
+        std::fs::remove_file(&db_path).ok();
     }
 }

@@ -119,7 +119,8 @@ pub(crate) async fn cmd_serve(config_path: &str) {
 
     let mut gateway_app = Router::new()
         .route("/paygate/sessions/nonce", axum::routing::post(sessions::handle_nonce))
-        .route("/paygate/sessions", axum::routing::post(sessions::handle_create_session))
+        .route("/paygate/sessions", axum::routing::post(sessions::handle_create_session)
+            .get(sessions::handle_get_sessions))
         .merge(admin::receipt_route())
         .merge(admin::transactions_route())
         .fallback(gateway_handler)
@@ -343,12 +344,40 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
                             let _ = state.db_writer.refund_session_balance(&deduction.session_id, deduction.amount_deducted).await;
                             resp.headers_mut().insert("X-Payment-Refunded", HeaderValue::from_static("true"));
                         }
+
+                        // Dynamic pricing adjustment (session auth only)
+                        let final_cost = if config.pricing.dynamic.enabled {
+                            if let Some(token_count_header) = resp.headers().get(&config.pricing.dynamic.header_source) {
+                                if let Ok(token_count_str) = token_count_header.to_str() {
+                                    if let Ok(token_count) = token_count_str.parse::<u64>() {
+                                        let dynamic_cost = config.pricing.dynamic.compute_cost(token_count);
+
+                                        if dynamic_cost > deduction.amount_deducted {
+                                            let diff = dynamic_cost - deduction.amount_deducted;
+                                            let _ = sessions::deduct_additional(&state, &deduction.session_id, diff).await;
+                                        } else if dynamic_cost < deduction.amount_deducted {
+                                            let diff = deduction.amount_deducted - dynamic_cost;
+                                            let _ = state.db_writer.refund_session_balance(&deduction.session_id, diff).await;
+                                        }
+
+                                        // Update X-Payment-Cost header to reflect actual cost
+                                        let cost_decimal = format!("{:.6}", dynamic_cost as f64 / 1_000_000.0);
+                                        if let Ok(v) = HeaderValue::from_str(&cost_decimal) {
+                                            resp.headers_mut().insert("X-Payment-Cost", v);
+                                        }
+
+                                        dynamic_cost
+                                    } else { deduction.amount_deducted }
+                                } else { deduction.amount_deducted }
+                            } else { deduction.amount_deducted }
+                        } else { deduction.amount_deducted };
+
                         let _ = state.db_writer.log_request(
                             None,
                             Some(deduction.session_id),
                             endpoint,
                             deduction.payer_address,
-                            deduction.amount_deducted,
+                            final_cost,
                             Some(resp.status().as_u16() as i32),
                             None,
                         ).await;

@@ -40,6 +40,13 @@ quote_ttl_seconds = 300
 "POST /v1/image" = "0.01"
 "POST /v1/summarize" = "0.003"
 
+[pricing.dynamic]
+enabled = true
+formula = "token"
+base_cost_per_token = "0.00001"
+spread_per_token = "0.000005"
+header_source = "X-Token-Count"
+
 [rate_limiting]
 requests_per_second = 100
 per_payer_per_second = 10

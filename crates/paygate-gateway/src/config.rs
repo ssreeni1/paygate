@@ -152,11 +152,27 @@ pub struct DynamicPricingConfig {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub token_price: String,
+    pub formula: String,
     #[serde(default)]
-    pub compute_price: String,
+    pub base_cost_per_token: String,
     #[serde(default)]
+    pub spread_per_token: String,
+    #[serde(default = "default_header_source")]
     pub header_source: String,
+}
+
+fn default_header_source() -> String { "X-Token-Count".to_string() }
+
+impl DynamicPricingConfig {
+    /// Compute cost in base units for a given token count.
+    /// Parses base_cost_per_token and spread_per_token as f64 USD amounts,
+    /// multiplies by token_count, converts to base units (6 decimals).
+    pub fn compute_cost(&self, token_count: u64) -> u64 {
+        let base: f64 = self.base_cost_per_token.parse().unwrap_or(0.0);
+        let spread: f64 = self.spread_per_token.parse().unwrap_or(0.0);
+        let cost_usd = token_count as f64 * (base + spread);
+        (cost_usd * 1_000_000.0).round() as u64
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

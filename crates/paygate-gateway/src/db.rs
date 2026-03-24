@@ -371,6 +371,39 @@ impl DbReader {
         }
     }
 
+    /// List sessions for a specific payer address.
+    pub fn list_sessions_for_payer(&self, payer: &str) -> Result<Vec<FullSessionRecord>, DbError> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().timestamp();
+        let mut stmt = conn.prepare(
+            "SELECT id, secret, payer_address, deposit_tx, nonce, deposit_amount, balance,
+                    rate_per_request, requests_made, created_at, expires_at, status
+             FROM sessions WHERE payer_address = ? AND status = 'active' AND expires_at > ?
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![payer, now], |row| {
+            Ok(FullSessionRecord {
+                id: row.get(0)?,
+                secret: row.get(1)?,
+                payer_address: row.get(2)?,
+                deposit_tx: row.get(3)?,
+                nonce: row.get(4)?,
+                deposit_amount: row.get::<_, i64>(5)? as u64,
+                balance: row.get::<_, i64>(6)? as u64,
+                rate_per_request: row.get::<_, i64>(7)? as u64,
+                requests_made: row.get::<_, i64>(8)? as u64,
+                created_at: row.get(9)?,
+                expires_at: row.get(10)?,
+                status: row.get(11)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
     /// Count active sessions for a specific payer.
     pub fn count_active_sessions_for_payer(&self, payer: &str) -> Result<u64, DbError> {
         let conn = self.conn()?;
