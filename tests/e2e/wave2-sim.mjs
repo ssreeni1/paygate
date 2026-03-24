@@ -23,7 +23,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..', '..');
 
 // ─── Config ────────────────────────────────────────────────────────
-const GATEWAY_URL = process.env.GATEWAY_URL || 'http://localhost:8080';
+const GATEWAY_URL = process.env.GATEWAY_URL || 'http://127.0.0.1:8080';
 const TEMPO_RPC = process.env.TEMPO_RPC_URL || 'https://rpc.moderato.tempo.xyz';
 const CHAIN_ID = 42431;
 const PATHUSD = '0x20c0000000000000000000000000000000000000';
@@ -177,10 +177,12 @@ function stopInfra() {
 // ─── Test: Health Check ────────────────────────────────────────────
 async function testHealthCheck() {
   try {
-    const resp = await fetch(`${GATEWAY_URL}/paygate/health`);
+    // Use the free pricing endpoint as health check (admin port may differ)
+    const resp = await fetch(`${GATEWAY_URL}/v1/pricing`);
     const data = await resp.json();
-    step('health.check', { status: resp.ok ? 'PASS' : 'FAIL', response: data });
-    return resp.ok;
+    const ok = resp.ok && data?.apis;
+    step('health.check', { status: ok ? 'PASS' : 'FAIL', apis: data?.apis?.length || 0 });
+    return ok;
   } catch (e) {
     step('health.check', { status: 'FAIL', error: e.message });
     return false;
@@ -353,7 +355,7 @@ async function testSessionRequests(session, numCalls = 5) {
 async function testDynamicPricing(session) {
   const method = 'POST';
   const path = '/v1/summarize';
-  const body = JSON.stringify({ url: 'https://example.com', max_length: 100 });
+  const body = JSON.stringify({ text: 'Artificial intelligence is transforming how businesses operate across every sector. Machine learning models can now process vast amounts of data to identify patterns and make predictions that would take humans years to compute. This has led to breakthroughs in healthcare, finance, and transportation.', max_length: 100 });
 
   const rh = requestHash(method, path, body);
   const ts = Math.floor(Date.now() / 1000).toString();
@@ -421,12 +423,12 @@ async function testSessionBalanceEndpoint(payer) {
 // ─── Test: Free Endpoint (no payment) ──────────────────────────────
 async function testFreeEndpoint() {
   const resp = await gw('/v1/pricing');
-  const pass = resp.status === 200 && resp.json?.endpoints;
+  const pass = resp.status === 200 && (resp.json?.endpoints || resp.json?.apis);
 
   step('free_endpoint', {
     status: pass ? 'PASS' : 'FAIL',
     http_status: resp.status,
-    endpoints: resp.json?.endpoints ? Object.keys(resp.json.endpoints).length : 0,
+    endpoints: resp.json?.apis?.length || (resp.json?.endpoints ? Object.keys(resp.json.endpoints).length : 0),
   });
 
   return pass;
@@ -437,7 +439,7 @@ async function testSessionExhaustion(session) {
   // Keep calling until balance runs out
   let exhausted = false;
   let calls = 0;
-  const maxCalls = 100; // safety cap
+  const maxCalls = 50; // safety cap — $0.05 deposit / $0.002 per call = 25 calls max
 
   while (!exhausted && calls < maxCalls) {
     const method = 'POST';
@@ -460,6 +462,9 @@ async function testSessionExhaustion(session) {
     });
 
     calls++;
+
+    // Small delay to let async DB writer flush deductions
+    if (calls % 5 === 0) await new Promise(r => setTimeout(r, 50));
 
     if (resp.status === 402) {
       exhausted = true;
