@@ -37,6 +37,10 @@ export interface PayGateClientOptions {
   payerAddress: string;
   /** Max retries after payment (default: 1) */
   maxRetries?: number;
+  /** Enable automatic session management */
+  autoSession?: boolean;
+  /** Deposit amount per session in USDC (default: "0.10") */
+  sessionDeposit?: string;
 }
 
 export interface PaymentParams {
@@ -44,4 +48,26 @@ export interface PaymentParams {
   amount: bigint;
   token: string;
   memo: string;
+}
+
+export interface SessionNonceResponse {
+  nonce: string;
+  expiresAt: string;
+}
+
+export interface SessionCreateResponse {
+  sessionId: string;
+  sessionSecret: string;
+  balance: string;
+  ratePerRequest: string;
+  expiresAt: string;
+}
+
+export interface SessionInfo {
+  sessionId: string;
+  balance: string;
+  ratePerRequest: string;
+  requestsMade: number;
+  expiresAt: string;
+  status: string;
 }

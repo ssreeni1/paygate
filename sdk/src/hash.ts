@@ -1,4 +1,5 @@
 import { keccak256, toBytes } from 'viem';
+import { createHmac } from 'crypto';
 
 /**
  * Compute requestHash = keccak256(method + " " + path + "\n" + body).
@@ -46,4 +47,24 @@ export function paymentMemo(quoteId: string, reqHash: `0x${string}`): `0x${strin
   input.set(hashBytes, offset);
 
   return keccak256(input);
+}
+
+/**
+ * Compute session memo = keccak256("paygate-session" + nonce).
+ * Used when creating a deposit for a pay-as-you-go session.
+ */
+export function sessionMemo(nonce: string): `0x${string}` {
+  const input = new TextEncoder().encode('paygate-session' + nonce);
+  return keccak256(input);
+}
+
+/**
+ * Compute HMAC-SHA256 for session authentication.
+ * The secret is expected in hex format, optionally prefixed with "ssec_".
+ */
+export function hmacSha256(secret: string, message: string): string {
+  const rawSecret = secret.startsWith('ssec_') ? secret.slice(5) : secret;
+  return createHmac('sha256', Buffer.from(rawSecret, 'hex'))
+    .update(message)
+    .digest('hex');
 }

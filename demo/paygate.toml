@@ -24,6 +24,11 @@ address = "0x002925FAFE98cfeB9fdBb7d6045ce318E4BD4b88"
 name = "PayGate Demo Marketplace"
 description = "Search, scrape, image generation, and summarization APIs"
 
+[sponsorship]
+enabled = true
+budget_per_day = "1.00"
+max_per_tx = "0.01"
+
 [pricing]
 default_price = "0.001"
 quote_ttl_seconds = 300
