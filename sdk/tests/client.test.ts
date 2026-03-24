@@ -331,3 +331,320 @@ describe('PayGateClient', () => {
     });
   });
 });
+
+// --- Wave 3 Tests ---
+
+const MOCK_PRICING_RESPONSE = {
+  apis: [
+    { endpoint: 'POST /v1/search', price: '0.005000', price_base_units: 5000, decimals: 6, dynamic: false },
+    { endpoint: 'POST /v1/summarize', price: '0.010000', price_base_units: 10000, decimals: 6, dynamic: true },
+    { endpoint: 'POST /v1/image', price: '0.050000', price_base_units: 50000, decimals: 6, dynamic: false },
+  ],
+};
+
+function makePricingResponse(): Response {
+  return new Response(JSON.stringify(MOCK_PRICING_RESPONSE), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+describe('estimateCost', () => {
+  let mockPayFunction: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockPayFunction = vi.fn().mockResolvedValue('0xtxhash123');
+  });
+
+  it('computes total and breakdown for multiple endpoints', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+    });
+
+    const result = await client.estimateCost('https://gateway.example.com', [
+      { endpoint: 'POST /v1/search', count: 3 },
+      { endpoint: 'POST /v1/summarize', count: 2 },
+    ]);
+
+    expect(result.total).toBe('0.035000');
+    expect(result.breakdown).toHaveLength(2);
+    expect(result.breakdown[0]).toEqual({
+      endpoint: 'POST /v1/search',
+      price: '0.005000',
+      count: 3,
+      subtotal: '0.015000',
+      dynamic: false,
+    });
+    expect(result.breakdown[1]).toEqual({
+      endpoint: 'POST /v1/summarize',
+      price: '0.010000',
+      count: 2,
+      subtotal: '0.020000',
+      dynamic: true,
+    });
+    expect(result.withinBudget).toBe(true);
+  });
+
+  it('withinBudget is true when total <= spendLimit', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      spendLimit: '0.05',
+    });
+
+    const result = await client.estimateCost('https://gateway.example.com', [
+      { endpoint: 'POST /v1/search', count: 5 },
+    ]);
+
+    expect(result.total).toBe('0.025000');
+    expect(result.withinBudget).toBe(true);
+  });
+
+  it('withinBudget is false when total > spendLimit', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      spendLimit: '0.01',
+    });
+
+    const result = await client.estimateCost('https://gateway.example.com', [
+      { endpoint: 'POST /v1/search', count: 5 },
+    ]);
+
+    expect(result.total).toBe('0.025000');
+    expect(result.withinBudget).toBe(false);
+  });
+
+  it('uses cached pricing on second call within TTL', async () => {
+    const mockFetch = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+    });
+
+    await client.estimateCost('https://gateway.example.com', [
+      { endpoint: 'POST /v1/search', count: 1 },
+    ]);
+
+    const result = await client.estimateCost('https://gateway.example.com', [
+      { endpoint: 'POST /v1/summarize', count: 1 },
+    ]);
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(result.total).toBe('0.010000');
+  });
+
+  it('throws on unknown endpoint', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+    });
+
+    await expect(
+      client.estimateCost('https://gateway.example.com', [
+        { endpoint: 'POST /v1/nonexistent', count: 1 },
+      ])
+    ).rejects.toThrow('Unknown endpoint');
+  });
+
+  it('returns zero total for empty calls array', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      spendLimit: '1.00',
+    });
+
+    const result = await client.estimateCost('https://gateway.example.com', []);
+
+    expect(result.total).toBe('0.000000');
+    expect(result.breakdown).toHaveLength(0);
+    expect(result.withinBudget).toBe(true);
+  });
+
+  it('marks dynamic-priced endpoints in breakdown', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makePricingResponse());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+    });
+
+    const result = await client.estimateCost('https://gateway.example.com', [
+      { endpoint: 'POST /v1/search', count: 1 },
+      { endpoint: 'POST /v1/summarize', count: 1 },
+    ]);
+
+    const searchEntry = result.breakdown.find(b => b.endpoint === 'POST /v1/search')!;
+    const summarizeEntry = result.breakdown.find(b => b.endpoint === 'POST /v1/summarize')!;
+
+    expect(searchEntry.dynamic).toBe(false);
+    expect(summarizeEntry.dynamic).toBe(true);
+  });
+});
+
+describe('failureMode', () => {
+  let mockPayFunction: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockPayFunction = vi.fn().mockResolvedValue('0xtxhash123');
+  });
+
+  it('closed (default) throws on network error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new TypeError('fetch failed'));
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+    });
+
+    await expect(
+      client.fetch('https://gateway.example.com/v1/search', {
+        method: 'POST',
+        body: '{"q":"test"}',
+      })
+    ).rejects.toThrow('fetch failed');
+  });
+
+  it('open bypasses to upstream on network error', async () => {
+    const mockFetch = vi.spyOn(globalThis, 'fetch')
+      .mockRejectedValueOnce(new TypeError('fetch failed'))
+      .mockResolvedValueOnce(make200Response('{"fallback":true}'));
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      failureMode: 'open',
+      upstreamUrl: 'https://upstream.example.com',
+    });
+
+    const response = await client.fetch('https://gateway.example.com/v1/search?q=test', {
+      method: 'POST',
+      body: '{"q":"test"}',
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body).toEqual({ fallback: true });
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const bypassCall = mockFetch.mock.calls[1];
+    expect(bypassCall[0]).toBe('https://upstream.example.com/v1/search?q=test');
+  });
+
+  it('open does NOT bypass on gateway 5xx (only network errors)', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response('Internal Server Error', { status: 500 })
+    );
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      failureMode: 'open',
+      upstreamUrl: 'https://upstream.example.com',
+    });
+
+    const response = await client.fetch('https://gateway.example.com/v1/search', {
+      method: 'POST',
+      body: '{}',
+    });
+
+    expect(response.status).toBe(500);
+  });
+
+  it('open without upstreamUrl throws at construction', () => {
+    expect(() => new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      failureMode: 'open',
+    })).toThrow("failureMode 'open' requires upstreamUrl");
+  });
+});
+
+describe('agentName', () => {
+  let mockPayFunction: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    mockPayFunction = vi.fn().mockResolvedValue('0xtxhash123');
+  });
+
+  it('includes X-Payment-Agent header on every outgoing request', async () => {
+    const mockFetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(make402Response())
+      .mockResolvedValueOnce(make200Response());
+
+    const client = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      agentName: 'my-research-bot',
+    });
+
+    await client.fetch('https://gateway.example.com/v1/search', {
+      method: 'POST',
+      body: '{"q":"test"}',
+    });
+
+    for (const call of mockFetch.mock.calls) {
+      const init = call[1] as RequestInit;
+      const headers = init.headers as Record<string, string>;
+      expect(headers['X-Payment-Agent']).toBe('my-research-bot');
+    }
+  });
+
+  it('includes X-Payment-Agent in session nonce and creation requests', async () => {
+    const sessionClient = new PayGateClient({
+      payFunction: mockPayFunction,
+      payerAddress: '0xPayer',
+      autoSession: true,
+      sessionDeposit: '0.05',
+      agentName: 'session-bot',
+    });
+
+    const mockFetch = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(make402Response())
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ nonce: 'nonce_abc' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        })
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({
+          sessionId: 'sess_1',
+          sessionSecret: 'ssec_aabbccdd',
+          balance: '0.050000',
+          ratePerRequest: '0.000500',
+        }), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      )
+      .mockResolvedValueOnce(make200Response());
+
+    await sessionClient.fetch('https://gateway.example.com/v1/chat', {
+      method: 'POST',
+      body: '{}',
+    });
+
+    // Check nonce request (call index 1) has agent header
+    const nonceInit = mockFetch.mock.calls[1][1] as RequestInit;
+    const nonceHeaders = nonceInit.headers as Record<string, string>;
+    expect(nonceHeaders['X-Payment-Agent']).toBe('session-bot');
+
+    // Check session creation request (call index 2) has agent header
+    const createInit = mockFetch.mock.calls[2][1] as RequestInit;
+    const createHeaders = createInit.headers as Record<string, string>;
+    expect(createHeaders['X-Payment-Agent']).toBe('session-bot');
+  });
+});
