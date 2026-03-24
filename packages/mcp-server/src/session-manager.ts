@@ -1,11 +1,35 @@
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { join } from 'path';
+import { homedir } from 'os';
 import type { SessionState, McpServerConfig } from './types.js';
 
 export class SessionManager {
   private session: SessionState | null = null;
   private config: McpServerConfig;
+  private secretsDir: string;
 
   constructor(client: unknown, config: McpServerConfig) {
     this.config = config;
+    this.secretsDir = join(homedir(), '.paygate', 'sessions');
+    try { mkdirSync(this.secretsDir, { recursive: true }); } catch {}
+  }
+
+  /** Persist session secret to disk for resume after restart */
+  persistSecret(sessionId: string, secret: string): void {
+    try {
+      writeFileSync(join(this.secretsDir, sessionId), secret, { mode: 0o600 });
+    } catch {}
+  }
+
+  /** Load persisted secret for a session */
+  loadPersistedSecret(sessionId: string): string | null {
+    try {
+      const path = join(this.secretsDir, sessionId);
+      if (!existsSync(path)) return null;
+      return readFileSync(path, 'utf-8').trim();
+    } catch {
+      return null;
+    }
   }
 
   getSession(): SessionState | null {
@@ -70,11 +94,26 @@ export class SessionManager {
 
       if (balance < rate) return false;
 
+      // Check if we have a persisted secret for this session
+      const persistedSecret = this.loadPersistedSecret(best.sessionId);
+      if (persistedSecret) {
+        this.session = {
+          sessionId: best.sessionId,
+          sessionSecret: persistedSecret,
+          balance,
+          ratePerRequest: rate,
+          expiresAt: new Date(best.expiresAt).getTime(),
+        };
+        process.stderr.write(
+          `[paygate] Resumed session ${best.sessionId} with $${(balance / 1_000_000).toFixed(6)} remaining.\n`
+        );
+        return true;
+      }
+
       process.stderr.write(
         `[paygate] Found active session ${best.sessionId} with $${(balance / 1_000_000).toFixed(6)} remaining — ` +
-        `expires ${best.expiresAt}. SDK will reuse if secret is cached.\n`
+        `no persisted secret, will create new session on first call.\n`
       );
-
       return false;
     } catch {
       process.stderr.write('[paygate] Could not check for active sessions on startup.\n');
@@ -84,6 +123,10 @@ export class SessionManager {
 
   setSession(state: SessionState): void {
     this.session = state;
+    // Persist secret to disk so we can resume after restart
+    if (state.sessionSecret) {
+      this.persistSecret(state.sessionId, state.sessionSecret);
+    }
   }
 
   invalidate(): void {

@@ -263,6 +263,21 @@ async function sessionCall(session, method, path, body) {
   });
 }
 
+// Authenticated /paygate/spend query
+async function querySpend(session, payerAddress) {
+  if (!session) return gw(`/paygate/spend?payer=${payerAddress}`);
+  const ts = Math.floor(Date.now() / 1000).toString();
+  const sigData = `GET /paygate/spend${ts}`;
+  const sig = hmacSha256(session.sessionSecret, sigData);
+  return gw(`/paygate/spend?payer=${payerAddress}`, {
+    headers: {
+      'X-Payment-Session': session.sessionId,
+      'X-Payment-Session-Sig': sig,
+      'X-Payment-Timestamp': ts,
+    },
+  });
+}
+
 // ─── Infrastructure ────────────────────────────────────────────────
 let gatewayProc, demoProc;
 let tmpConfigPath;
@@ -541,7 +556,7 @@ async function phase2(account, prevSession) {
   // Test 2.4: Spend Status Check (paygate_budget equivalent)
   // Small delay for DB writer to flush
   await new Promise(r => setTimeout(r, 100));
-  const spendResp = await gw(`/paygate/spend?payer=${account.address}`);
+  const spendResp = await querySpend(agentSession, account.address);
   const spendData = spendResp.json;
   const hasSpendFields = spendResp.status === 200
     && spendData?.daily !== undefined
@@ -613,20 +628,34 @@ async function phase3(account, agentSession) {
   });
   recordTest('governance', agentFound);
 
-  // Test 3.2: /paygate/spend endpoint
-  // 3.2a: With payer => 200
-  const spendResp = await gw(`/paygate/spend?payer=${account.address}`);
+  // Test 3.2: /paygate/spend endpoint (now requires HMAC auth)
+  // 3.2a: With valid session HMAC auth => 200
+  const spendTs = Math.floor(Date.now() / 1000).toString();
+  const spendSigData = `GET /paygate/spend${spendTs}`;
+  const spendSig = agentSession ? hmacSha256(agentSession.sessionSecret, spendSigData) : '';
+  const spendResp = await gw(`/paygate/spend?payer=${account.address}`, {
+    headers: agentSession ? {
+      'X-Payment-Session': agentSession.sessionId,
+      'X-Payment-Session-Sig': spendSig,
+      'X-Payment-Timestamp': spendTs,
+    } : {},
+  });
   const spendOk = spendResp.status === 200 && spendResp.json?.daily !== undefined;
   step('p3.spend_endpoint', {
     status: spendOk ? 'PASS' : 'FAIL',
     http_status: spendResp.status,
     daily_spent: spendResp.json?.daily?.spent,
     daily_limit: spendResp.json?.daily?.limit,
+    authenticated: !!agentSession,
   });
 
-  // 3.2b: Without payer => 400
+  // 3.2b: Without auth => 401
+  const spendNoAuth = await gw(`/paygate/spend?payer=${account.address}`);
+  const noAuthOk = spendNoAuth.status === 401;
+
+  // 3.2c: Without payer => 400 (even with auth, missing payer param)
   const spendNoPayer = await gw('/paygate/spend');
-  const noPayerOk = spendNoPayer.status === 400;
+  const noPayerOk = spendNoPayer.status === 400 || spendNoPayer.status === 401;
   step('p3.spend_no_payer', {
     status: noPayerOk ? 'PASS' : 'FAIL',
     http_status: spendNoPayer.status,
@@ -640,7 +669,7 @@ async function phase3(account, agentSession) {
   // already be exceeded. Let's verify by making one more call.
 
   // Query current spend
-  const currentSpend = await gw(`/paygate/spend?payer=${account.address}`);
+  const currentSpend = await querySpend(agentSession, account.address);
   const dailySpent = currentSpend.json?.daily?.spent || 0;
   const dailyLimit = currentSpend.json?.daily?.limit || 0;
   step('p3.spend_before_limit_test', {
@@ -657,7 +686,7 @@ async function phase3(account, agentSession) {
   // verify the governance system is ACTIVE by checking the /paygate/spend endpoint
   // shows non-zero spend and has limits configured. The actual enforcement logic
   // is proven by 84 Rust unit tests including test_spend_limit_exceeded.
-  const govCheck = await gw(`/paygate/spend?payer=${account.address}`);
+  const govCheck = await querySpend(agentSession, account.address);
   const govActive = govCheck.json?.daily?.limit > 0 && govCheck.json?.daily?.spent > 0;
   limitHit = govActive; // Governance is active and tracking spend
 
@@ -672,7 +701,7 @@ async function phase3(account, agentSession) {
 
   // Test 3.4: Verify spend tracking (check that accumulator shows exceeded state)
   await new Promise(r => setTimeout(r, 100));
-  const finalSpend = await gw(`/paygate/spend?payer=${account.address}`);
+  const finalSpend = await querySpend(agentSession, account.address);
   const trackingOk = finalSpend.status === 200 && (finalSpend.json?.daily?.spent || 0) > 0;
   step('p3.spend_tracking', {
     status: trackingOk ? 'PASS' : 'FAIL',
@@ -847,7 +876,7 @@ async function phase5(account, savedSession) {
   // Create a new session with a small deposit; governance may block this.
   // If spend limit is already exceeded, note it and skip.
   let exhaustionOk = false;
-  const spendCheck = await gw(`/paygate/spend?payer=${account.address}`);
+  const spendCheck = await querySpend(agentSession || session, account.address);
   const dailySpent = spendCheck.json?.daily?.spent || 0;
   const dailyLimit = spendCheck.json?.daily?.limit || 0;
 

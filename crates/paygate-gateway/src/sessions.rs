@@ -634,6 +634,7 @@ pub async fn handle_get_sessions(
 
 pub async fn handle_get_spend(
     State(state): State<AppState>,
+    headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
     let payer = match params.get("payer") {
@@ -645,6 +646,57 @@ pub async fn handle_get_spend(
             }))).into_response();
         }
     };
+
+    // Require a valid session for the requested payer (HMAC auth)
+    let session_id = headers.get("x-payment-session").and_then(|v| v.to_str().ok());
+    let session_sig = headers.get("x-payment-session-sig").and_then(|v| v.to_str().ok());
+    let timestamp = headers.get("x-payment-timestamp").and_then(|v| v.to_str().ok());
+
+    if let (Some(sid), Some(_sig), Some(ts)) = (session_id, session_sig, timestamp) {
+        // Verify the session belongs to the requested payer
+        if let Ok(Some(session)) = state.db_reader.get_session(sid) {
+            if session.payer_address != *payer {
+                return (StatusCode::FORBIDDEN, Json(json!({
+                    "error": "payer_mismatch",
+                    "message": "Session does not belong to the requested payer"
+                }))).into_response();
+            }
+            // HMAC verification: compute expected sig over "GET /paygate/spend" + timestamp
+            let raw_secret = session.secret.strip_prefix("ssec_").unwrap_or(&session.secret);
+            if let Ok(key_bytes) = hex::decode(raw_secret) {
+                use hmac::{Hmac, Mac};
+                use sha2::Sha256;
+                type HmacSha256 = Hmac<Sha256>;
+                let request_data = format!("GET /paygate/spend{}", ts);
+                let mut mac = match HmacSha256::new_from_slice(&key_bytes) {
+                    Ok(m) => m,
+                    Err(_) => return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response(),
+                };
+                mac.update(request_data.as_bytes());
+                let sig_hex = _sig.strip_prefix("0x").unwrap_or(_sig);
+                if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                    if mac.verify_slice(&sig_bytes).is_err() {
+                        return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+                    }
+                } else {
+                    return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+                }
+            } else {
+                return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+            }
+            // Session verified — fall through to return spend data
+        } else {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "auth_required",
+                "message": "Valid session required to query spend data"
+            }))).into_response();
+        }
+    } else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({
+            "error": "auth_required",
+            "message": "Valid session required to query spend data. Include X-Payment-Session, X-Payment-Session-Sig, and X-Payment-Timestamp headers."
+        }))).into_response();
+    }
 
     let config = state.current_config();
 
