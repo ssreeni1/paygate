@@ -1,4 +1,4 @@
-import type { PricingInfo, PaymentRequiredResponse } from './types.js';
+import type { PricingInfo, PaymentRequiredResponse, EndpointPricing } from './types.js';
 
 /**
  * Check if a response is a 402 Payment Required.
@@ -51,4 +51,40 @@ export async function getPricing(baseUrl: string): Promise<Record<string, Pricin
   return {
     [`GET ${url.pathname}`]: body.pricing,
   };
+}
+
+/**
+ * Fetch the full pricing map from the gateway's /v1/pricing endpoint.
+ * Returns a map of "METHOD /path" -> EndpointPricing.
+ */
+export async function fetchEndpointPricing(
+  baseUrl: string,
+): Promise<Map<string, EndpointPricing>> {
+  const url = `${baseUrl.replace(/\/$/, '')}/v1/pricing`;
+  const response = await fetch(url, { method: 'GET' });
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch pricing from ${url}: ${response.status}`);
+  }
+
+  const body = await response.json() as {
+    apis: Array<{
+      endpoint: string;
+      price: string;
+      price_base_units: number;
+      decimals: number;
+      dynamic: boolean;
+    }>;
+  };
+
+  const map = new Map<string, EndpointPricing>();
+  for (const api of body.apis) {
+    map.set(api.endpoint, {
+      price: api.price,
+      priceBaseUnits: api.price_base_units,
+      decimals: api.decimals,
+      dynamic: api.dynamic ?? false,
+    });
+  }
+  return map;
 }

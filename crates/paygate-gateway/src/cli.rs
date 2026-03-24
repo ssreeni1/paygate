@@ -7,6 +7,7 @@ use crate::helpers::*;
 use crate::rate_limit;
 use crate::serve::{gateway_handler, check_rpc_connectivity};
 use crate::server;
+use crate::sessions;
 use paygate_common::types::{format_amount, format_usd, TOKEN_DECIMALS};
 use std::path::Path;
 use std::sync::Arc;
@@ -450,6 +451,7 @@ pub(crate) async fn cmd_test(is_demo: bool) {
         security: Default::default(),
         webhooks: Default::default(),
         storage: Default::default(),
+        governance: Default::default(),
     };
 
     let state = server::AppState {
@@ -461,6 +463,7 @@ pub(crate) async fn cmd_test(is_demo: bool) {
         webhook_sender: None,
         prometheus_handle,
         started_at: std::time::Instant::now(),
+        spend_accumulator: Arc::new(sessions::SpendAccumulator::new()),
     };
 
     let gw_app = Router::new()

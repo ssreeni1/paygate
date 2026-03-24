@@ -199,6 +199,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let state = AppState {
@@ -212,6 +213,7 @@ mod tests {
                 .build_recorder()
                 .handle(),
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         };
 
         // Build a request WITH X-Payment-* headers
@@ -268,6 +270,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
         AppState {
             config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
@@ -280,6 +283,7 @@ mod tests {
                 .build_recorder()
                 .handle(),
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         }
     }
 

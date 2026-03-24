@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.5.0] - 2026-03-24
+
+### Added
+
+- **MCP server** (`@paygate/mcp`) — PayGate as an MCP server for Claude Code and Cursor. 5 tools: `paygate_discover` (with AI goal-based ranking), `paygate_call` (auto-session payments), `paygate_budget`, `paygate_estimate`, `paygate_trace` (workflow cost grouping)
+- **Spend governance** — daily/monthly spend limits with in-memory `SpendAccumulator` for real-time enforcement. Returns 402 `spend_limit_exceeded` when limits hit. Configurable via `[governance]` TOML section
+- **Agent identity** — `X-Payment-Agent` header tracked on sessions and request logs. Enables per-agent spend visibility
+- **`GET /paygate/spend`** endpoint with HMAC authentication — returns daily/monthly spend data for a payer. Requires valid session credentials (401 without auth, 403 on mismatch)
+- **SDK `estimateCost()`** — estimate total cost for a multi-call plan with `withinBudget` flag checked against local `spendLimit`
+- **SDK `failureMode`** — `'open'` (bypass to upstream when gateway unreachable) or `'closed'` (throw error, default). Open mode requires `upstreamUrl`
+- **SDK `agentName`** — propagates `X-Payment-Agent` header on every request including session creation
+- **`PAYGATE_PRIVATE_KEY_CMD`** — load wallet key from a shell command (1Password, Keychain, etc.) instead of plaintext env var
+- **Session resume on restart** — MCP server persists session secrets to `~/.paygate/sessions/` and rehydrates on startup
+- **`llms.txt`** — AI-consumable documentation at docs root with MCP config, tool list, workflow, and security notes
+- **npm workspaces** — monorepo structure with `sdk/` and `packages/*` workspaces
+- **Wave 3 E2E simulation** (`tests/e2e/wave3-sim.mjs`) — 20-test comprehensive simulation covering all Wave 3 features against Tempo testnet with real on-chain transactions
+
+### Changed
+
+- `GET /paygate/spend` now requires HMAC session authentication (was unauthenticated)
+- `SessionManager.tryResumeSession()` now actually resumes sessions using persisted secrets (was always returning false)
+
+### Fixed
+
+- Session resume was non-functional — `tryResumeSession()` found active sessions but never set them. Now persists and loads secrets from disk
+
 ## [0.4.0] - 2026-03-23
 
 ### Added

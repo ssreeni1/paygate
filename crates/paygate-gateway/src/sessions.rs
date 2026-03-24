@@ -1,16 +1,18 @@
-use axum::body::Body;
 use axum::extract::{Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use alloy_primitives::{Address, B256};
+use chrono::Datelike;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use serde_json::json;
+use std::collections::HashMap;
+use std::sync::Mutex;
 use tracing::{error, info, warn};
 
 use crate::config::parse_price_to_base_units;
-use crate::db::FullSessionRecord;
+use crate::db::{self, FullSessionRecord};
 use crate::server::AppState;
 use crate::verifier;
 use paygate_common::hash;
@@ -35,6 +37,101 @@ pub enum SessionError {
     InvalidSignature,
     StaleTimestamp,
     DeductionFailed,
+    SpendLimitExceeded { period: String, limit: u64, spent: u64 },
+}
+
+// ─── Spend Accumulator ──────────────────────────────────────────────────────
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct SpendKey {
+    payer: String,
+    period: String, // "daily" or "monthly"
+}
+
+#[derive(Debug)]
+struct Accumulator {
+    total: u64,
+    reset_at: i64, // UTC timestamp when this bucket resets
+}
+
+/// In-memory spend accumulator with UTC day/month reset.
+/// Falls back to DB queries on cold start or after reset.
+pub struct SpendAccumulator {
+    buckets: Mutex<HashMap<SpendKey, Accumulator>>,
+}
+
+impl SpendAccumulator {
+    pub fn new() -> Self {
+        Self {
+            buckets: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Record spend and return the new total for that (payer, period) bucket.
+    /// If the bucket has expired, re-seed from the DB reader.
+    pub fn record_and_check(
+        &self,
+        payer: &str,
+        amount: u64,
+        period: &str,
+        db_reader: &db::DbReader,
+    ) -> u64 {
+        let now = chrono::Utc::now().timestamp();
+        let reset_at = match period {
+            "daily" => db::utc_day_start() + 86400,
+            "monthly" => {
+                let now_dt = chrono::Utc::now();
+                let next_month = if now_dt.month() == 12 {
+                    chrono::NaiveDate::from_ymd_opt(now_dt.year() + 1, 1, 1)
+                } else {
+                    chrono::NaiveDate::from_ymd_opt(now_dt.year(), now_dt.month() + 1, 1)
+                };
+                next_month.unwrap().and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp()
+            }
+            _ => now + 86400,
+        };
+
+        let key = SpendKey {
+            payer: payer.to_string(),
+            period: period.to_string(),
+        };
+
+        let mut buckets = self.buckets.lock().unwrap();
+        let entry = buckets.entry(key).or_insert_with(|| {
+            // Cold start: seed from DB
+            let db_total = match period {
+                "daily" => db_reader.daily_spend_for_payer(payer).unwrap_or(0),
+                "monthly" => db_reader.monthly_spend_for_payer(payer).unwrap_or(0),
+                _ => 0,
+            };
+            Accumulator {
+                total: db_total,
+                reset_at,
+            }
+        });
+
+        // Check if bucket has expired
+        if now >= entry.reset_at {
+            // Re-seed from DB
+            let db_total = match period {
+                "daily" => db_reader.daily_spend_for_payer(payer).unwrap_or(0),
+                "monthly" => db_reader.monthly_spend_for_payer(payer).unwrap_or(0),
+                _ => 0,
+            };
+            entry.total = db_total;
+            entry.reset_at = reset_at;
+        }
+
+        entry.total += amount;
+        entry.total
+    }
+}
+
+pub struct SpendLimitInfo {
+    pub daily_spent: u64,
+    pub daily_limit: u64,
+    pub monthly_spent: u64,
+    pub monthly_limit: u64,
 }
 
 // ─── POST /paygate/sessions/nonce ──────────────────────────────────────────
@@ -119,6 +216,12 @@ pub async fn handle_create_session(State(state): State<AppState>, req: Request) 
             }))).into_response();
         }
     };
+
+    let agent_name = req.headers()
+        .get(mpp::HEADER_PAYMENT_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_string();
 
     // Parse body for nonce
     let body_bytes = match axum::body::to_bytes(req.into_body(), 4096).await {
@@ -328,6 +431,7 @@ pub async fn handle_create_session(State(state): State<AppState>, req: Request) 
         created_at: now,
         expires_at,
         status: "active".to_string(),
+        agent_name: agent_name.clone(),
     };
 
     let payment = PaymentRecord {
@@ -373,6 +477,7 @@ pub async fn verify_and_deduct(
     headers: &HeaderMap,
     request_hash: &B256,
     endpoint: &str,
+    agent_name: &str,
 ) -> Result<SessionDeduction, SessionError> {
     // 1. Extract headers
     let session_id = headers
@@ -427,6 +532,34 @@ pub async fn verify_and_deduct(
     // 5. Determine rate for this endpoint
     let config = state.current_config();
     let rate = config.price_for_endpoint(endpoint);
+
+    // 5b. Spend governance check
+    if config.governance.enabled {
+        let daily_limit = config.governance.daily_limit_base_units();
+        let monthly_limit = config.governance.monthly_limit_base_units();
+
+        let daily_new = state.spend_accumulator.record_and_check(
+            &session.payer_address, rate, "daily", &state.db_reader,
+        );
+        if daily_new > daily_limit {
+            return Err(SessionError::SpendLimitExceeded {
+                period: "daily".to_string(),
+                limit: daily_limit,
+                spent: daily_new,
+            });
+        }
+
+        let monthly_new = state.spend_accumulator.record_and_check(
+            &session.payer_address, rate, "monthly", &state.db_reader,
+        );
+        if monthly_new > monthly_limit {
+            return Err(SessionError::SpendLimitExceeded {
+                period: "monthly".to_string(),
+                limit: monthly_limit,
+                spent: monthly_new,
+            });
+        }
+    }
 
     // 6. Atomically deduct
     let deducted = state.db_writer.deduct_session_balance(&session.id, rate)
@@ -488,6 +621,7 @@ pub async fn handle_get_sessions(
             "expiresAt": chrono::DateTime::from_timestamp(s.expires_at, 0)
                 .map(|d| d.to_rfc3339()).unwrap_or_default(),
             "status": s.status,
+            "agentName": s.agent_name,
         })
     }).collect();
 
@@ -496,9 +630,102 @@ pub async fn handle_get_sessions(
     })).into_response()
 }
 
+// ─── GET /paygate/spend ─────────────────────────────────────────────────
+
+pub async fn handle_get_spend(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let payer = match params.get("payer") {
+        Some(p) if !p.is_empty() => p,
+        _ => {
+            return (StatusCode::BAD_REQUEST, Json(json!({
+                "error": "payer_required",
+                "message": "Query parameter 'payer' is required"
+            }))).into_response();
+        }
+    };
+
+    // Require a valid session for the requested payer (HMAC auth)
+    let session_id = headers.get("x-payment-session").and_then(|v| v.to_str().ok());
+    let session_sig = headers.get("x-payment-session-sig").and_then(|v| v.to_str().ok());
+    let timestamp = headers.get("x-payment-timestamp").and_then(|v| v.to_str().ok());
+
+    if let (Some(sid), Some(_sig), Some(ts)) = (session_id, session_sig, timestamp) {
+        // Verify the session belongs to the requested payer
+        if let Ok(Some(session)) = state.db_reader.get_session(sid) {
+            if session.payer_address != *payer {
+                return (StatusCode::FORBIDDEN, Json(json!({
+                    "error": "payer_mismatch",
+                    "message": "Session does not belong to the requested payer"
+                }))).into_response();
+            }
+            // HMAC verification: compute expected sig over "GET /paygate/spend" + timestamp
+            let raw_secret = session.secret.strip_prefix("ssec_").unwrap_or(&session.secret);
+            if let Ok(key_bytes) = hex::decode(raw_secret) {
+                use hmac::{Hmac, Mac};
+                use sha2::Sha256;
+                type HmacSha256 = Hmac<Sha256>;
+                let request_data = format!("GET /paygate/spend{}", ts);
+                let mut mac = match HmacSha256::new_from_slice(&key_bytes) {
+                    Ok(m) => m,
+                    Err(_) => return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response(),
+                };
+                mac.update(request_data.as_bytes());
+                let sig_hex = _sig.strip_prefix("0x").unwrap_or(_sig);
+                if let Ok(sig_bytes) = hex::decode(sig_hex) {
+                    if mac.verify_slice(&sig_bytes).is_err() {
+                        return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+                    }
+                } else {
+                    return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+                }
+            } else {
+                return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+            }
+            // Session verified — fall through to return spend data
+        } else {
+            return (StatusCode::UNAUTHORIZED, Json(json!({
+                "error": "auth_required",
+                "message": "Valid session required to query spend data"
+            }))).into_response();
+        }
+    } else {
+        return (StatusCode::UNAUTHORIZED, Json(json!({
+            "error": "auth_required",
+            "message": "Valid session required to query spend data. Include X-Payment-Session, X-Payment-Session-Sig, and X-Payment-Timestamp headers."
+        }))).into_response();
+    }
+
+    let config = state.current_config();
+
+    let daily_spent = state.db_reader.daily_spend_for_payer(payer).unwrap_or(0);
+    let monthly_spent = state.db_reader.monthly_spend_for_payer(payer).unwrap_or(0);
+
+    let daily_limit = config.governance.daily_limit_base_units();
+    let monthly_limit = config.governance.monthly_limit_base_units();
+
+    Json(json!({
+        "payer": payer,
+        "governance_enabled": config.governance.enabled,
+        "daily": {
+            "spent": daily_spent,
+            "limit": if daily_limit == u64::MAX { serde_json::Value::Null } else { json!(daily_limit) },
+            "remaining": if daily_limit == u64::MAX { serde_json::Value::Null } else { json!(daily_limit.saturating_sub(daily_spent)) },
+        },
+        "monthly": {
+            "spent": monthly_spent,
+            "limit": if monthly_limit == u64::MAX { serde_json::Value::Null } else { json!(monthly_limit) },
+            "remaining": if monthly_limit == u64::MAX { serde_json::Value::Null } else { json!(monthly_limit.saturating_sub(monthly_spent)) },
+        },
+    })).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::body::Body;
     use crate::config::*;
     use crate::rate_limit::RateLimiter;
     use rusqlite::{params, Connection};
@@ -547,6 +774,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         }
     }
 
@@ -564,6 +792,7 @@ mod tests {
                 .build_recorder()
                 .handle(),
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(SpendAccumulator::new()),
         };
         (state, db_path)
     }
@@ -701,7 +930,7 @@ mod tests {
         headers.insert("x-payment-session-sig", sig.parse().unwrap());
         headers.insert("x-payment-timestamp", ts.parse().unwrap());
 
-        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat").await;
+        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat", "").await;
         assert!(result.is_ok(), "HMAC verification should succeed");
 
         let deduction = result.unwrap();
@@ -729,7 +958,7 @@ mod tests {
         headers.insert("x-payment-session-sig", "bad_signature".parse().unwrap());
         headers.insert("x-payment-timestamp", ts.parse().unwrap());
 
-        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat").await;
+        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat", "").await;
         assert!(matches!(result, Err(SessionError::InvalidSignature)));
     }
 
@@ -758,7 +987,7 @@ mod tests {
         headers.insert("x-payment-session-sig", sig.parse().unwrap());
         headers.insert("x-payment-timestamp", old_ts.parse().unwrap());
 
-        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat").await;
+        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat", "").await;
         assert!(matches!(result, Err(SessionError::StaleTimestamp)));
     }
 
@@ -790,7 +1019,7 @@ mod tests {
         headers.insert("x-payment-session-sig", sig.parse().unwrap());
         headers.insert("x-payment-timestamp", ts.parse().unwrap());
 
-        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat").await;
+        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat", "").await;
         assert!(matches!(result, Err(SessionError::InsufficientBalance { .. })));
     }
 
@@ -819,7 +1048,7 @@ mod tests {
         headers.insert("x-payment-session-sig", sig.parse().unwrap());
         headers.insert("x-payment-timestamp", ts.parse().unwrap());
 
-        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat").await;
+        let result = verify_and_deduct(&state, &headers, &rh, "POST /v1/chat", "").await;
         assert!(matches!(result, Err(SessionError::SessionExpired)));
     }
 
@@ -900,6 +1129,7 @@ mod tests {
         let db_path = format!("/tmp/paygate_sess_test_{}.db", uuid::Uuid::new_v4());
         let conn = Connection::open(&db_path).unwrap();
         conn.execute_batch(include_str!("../../../schema.sql")).unwrap();
+        let _ = conn.execute_batch("ALTER TABLE sessions ADD COLUMN agent_name TEXT NOT NULL DEFAULT ''");
 
         let payer = "0x9E2b000000000000000000000000000000000001";
         let other = "0x1111000000000000000000000000000000000002";

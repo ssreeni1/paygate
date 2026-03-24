@@ -30,6 +30,8 @@ export interface ReceiptInfo {
   status: string;
 }
 
+export type FailureMode = 'open' | 'closed';
+
 export interface PayGateClientOptions {
   /** Function that executes on-chain payment. Returns tx hash. */
   payFunction: (params: PaymentParams) => Promise<string>;
@@ -41,6 +43,35 @@ export interface PayGateClientOptions {
   autoSession?: boolean;
   /** Deposit amount per session in USDC (default: "0.10") */
   sessionDeposit?: string;
+  /** Behavior when gateway is unreachable. 'closed' (default) throws; 'open' bypasses to upstreamUrl. */
+  failureMode?: FailureMode;
+  /** Required when failureMode is 'open'. Upstream origin URL for bypass. */
+  upstreamUrl?: string;
+  /** Agent identity string. Sent as X-Payment-Agent on every outgoing request. */
+  agentName?: string;
+  /** Spend limit in USDC (decimal string). Used by estimateCost() for withinBudget flag. */
+  spendLimit?: string;
+}
+
+export interface EndpointPricing {
+  price: string;
+  priceBaseUnits: number;
+  decimals: number;
+  dynamic: boolean;
+}
+
+export interface EstimateCostEntry {
+  endpoint: string;
+  price: string;
+  count: number;
+  subtotal: string;
+  dynamic: boolean;
+}
+
+export interface EstimateCostResult {
+  total: string;
+  breakdown: EstimateCostEntry[];
+  withinBudget: boolean;
 }
 
 export interface PaymentParams {
