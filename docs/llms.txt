@@ -1,0 +1,48 @@
+# PayGate
+
+PayGate is a reverse proxy that gates HTTP API access behind per-request stablecoin micropayments on the Tempo blockchain.
+
+## Quick Start
+
+Add to Claude Code MCP config:
+```json
+{
+  "mcpServers": {
+    "paygate": {
+      "command": "npx",
+      "args": ["@paygate/mcp"],
+      "env": {
+        "PAYGATE_GATEWAY_URL": "https://paygate-demo-production.up.railway.app",
+        "PAYGATE_PRIVATE_KEY": "0x..."
+      }
+    }
+  }
+}
+```
+
+## Tools
+
+- paygate_discover — List available APIs with pricing. Pass a `goal` to rank by relevance.
+- paygate_call — Call any API endpoint. Handles payment automatically. Returns result + payment proof.
+- paygate_budget — Check spending: session balance, daily/monthly limits, remaining budget.
+- paygate_estimate — Estimate cost for a plan of multiple calls.
+- paygate_trace — Track total cost across a multi-step workflow.
+
+## Typical Workflow
+
+1. Use paygate_discover to find APIs (or with a goal: "I need to search for news")
+2. Use paygate_estimate to check if your plan fits budget
+3. Use paygate_trace to start tracking
+4. Use paygate_call for each API request
+5. Use paygate_trace to stop and get cost summary
+6. Use paygate_budget to see remaining spend capacity
+
+## Payment Flow
+
+Every paygate_call creates an on-chain USDC payment on the Tempo blockchain. Payments are verifiable via Blockscout explorer links included in every response. Sessions batch multiple requests under a single deposit for efficiency.
+
+## Security
+
+- Set PAYGATE_PRIVATE_KEY_CMD instead of PAYGATE_PRIVATE_KEY to load key from a secure source (e.g. `op read op://vault/key/credential`)
+- Set PAYGATE_SPEND_LIMIT_DAILY to cap autonomous spending
+- All payments are on-chain and auditable
