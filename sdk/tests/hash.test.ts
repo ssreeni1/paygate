@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requestHash, paymentMemo } from '../src/hash.js';
+import { requestHash, paymentMemo, sessionMemo, hmacSha256 } from '../src/hash.js';
 import vectors from '../../tests/fixtures/request_hash_vectors.json';
 
 describe('requestHash cross-language parity', () => {
@@ -68,6 +68,50 @@ describe('requestHash cross-language parity', () => {
     const hashStr = requestHash('POST', '/v1/chat', bodyStr);
     const hashBytes = requestHash('POST', '/v1/chat', bodyBytes);
     expect(hashStr).toBe(hashBytes);
+  });
+});
+
+describe('sessionMemo', () => {
+  it('should produce a valid 0x-prefixed 64-char hex string', () => {
+    const memo = sessionMemo('nonce_abc123');
+    expect(memo).toMatch(/^0x[a-f0-9]{64}$/);
+  });
+
+  it('should be deterministic (same input = same output)', () => {
+    const memo1 = sessionMemo('nonce_abc123');
+    const memo2 = sessionMemo('nonce_abc123');
+    expect(memo1).toBe(memo2);
+  });
+
+  it('should produce different results for different nonces', () => {
+    const memo1 = sessionMemo('nonce_abc123');
+    const memo2 = sessionMemo('nonce_def456');
+    expect(memo1).not.toBe(memo2);
+  });
+});
+
+describe('hmacSha256', () => {
+  it('should produce a valid hex string', () => {
+    const sig = hmacSha256('aabbccdd', 'test message');
+    expect(sig).toMatch(/^[a-f0-9]+$/);
+  });
+
+  it('should strip ssec_ prefix and produce the same result', () => {
+    const sig1 = hmacSha256('aabbccdd', 'test message');
+    const sig2 = hmacSha256('ssec_aabbccdd', 'test message');
+    expect(sig1).toBe(sig2);
+  });
+
+  it('should produce different signatures for different messages', () => {
+    const sig1 = hmacSha256('aabbccdd', 'message one');
+    const sig2 = hmacSha256('aabbccdd', 'message two');
+    expect(sig1).not.toBe(sig2);
+  });
+
+  it('should be deterministic (same input = same output)', () => {
+    const sig1 = hmacSha256('aabbccdd', 'test message');
+    const sig2 = hmacSha256('aabbccdd', 'test message');
+    expect(sig1).toBe(sig2);
   });
 });
 
