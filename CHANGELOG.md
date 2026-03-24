@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0] - 2026-03-23
+
+### Added
+
+- **Sessions protocol** — deposit USDC once, get HMAC-authenticated session for rapid-fire API calls (~30ms vs ~2s per-request payment). Full lifecycle: nonce endpoint, on-chain deposit verification, session creation with secret, HMAC-SHA256 auth with constant-time comparison, atomic balance deduction
+- **Dynamic pricing** — provider-configurable per-token pricing formula (`cost = tokens × (base_cost + spread)`). Gateway reads `X-Token-Count` from upstream response and adjusts session balance. Works for LLM and harness/agent APIs
+- **SDK auto-session** (`autoSession: true`) — TypeScript SDK manages session lifecycle automatically: creates session on first 402, uses HMAC auth for subsequent requests, auto-renews when balance exhausted
+- **Fee sponsorship E2E** — standalone test script proving `/paygate/sponsor` works with Tempo's `withFeePayer` transport for gas-free consumer payments
+- **`no_charge_on_5xx`** — configurable per endpoint, refunds session balance when upstream returns 5xx. Adds `X-Payment-Refunded: true` header
+- **Session balance widget** on marketplace page — fixed-position widget polls `GET /paygate/sessions` every 5s, shows remaining balance, calls remaining, and low-balance warning
+- **`GET /paygate/sessions`** endpoint — returns active sessions for a payer address (powers the balance widget)
+- **`X-Token-Count` response headers** on demo summarize and search endpoints for dynamic pricing integration
+- **`sessionMemo()` and `hmacSha256()`** helpers in TypeScript SDK hash module
+- **Session nonces table** (`session_nonces`) for replay-protected session creation
+
+### Changed
+
+- Dynamic pricing note added to 402 responses when enabled: "Estimated price. Actual cost varies by response token count."
+- Config `discount_percent` default changed from 50 to 0 — sessions are a latency optimization, not a pricing discount
+
 ## [0.3.0] - 2026-03-23
 
 ### Added

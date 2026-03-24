@@ -444,6 +444,7 @@ pub(crate) async fn cmd_test(is_demo: bool) {
             },
             dynamic: Default::default(),
             tiers: Default::default(),
+            no_charge_on_5xx: Default::default(),
         },
         rate_limiting: Default::default(),
         security: Default::default(),

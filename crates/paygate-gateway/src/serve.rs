@@ -13,6 +13,7 @@ use crate::mpp;
 use crate::proxy::ProxyError;
 use crate::rate_limit;
 use crate::server::AppState;
+use crate::sessions;
 use crate::sponsor;
 use crate::verifier;
 use crate::webhook;
@@ -117,6 +118,9 @@ pub(crate) async fn cmd_serve(config_path: &str) {
         .allow_headers(tower_http::cors::Any);
 
     let mut gateway_app = Router::new()
+        .route("/paygate/sessions/nonce", axum::routing::post(sessions::handle_nonce))
+        .route("/paygate/sessions", axum::routing::post(sessions::handle_create_session)
+            .get(sessions::handle_get_sessions))
         .merge(admin::receipt_route())
         .merge(admin::transactions_route())
         .fallback(gateway_handler)
@@ -325,6 +329,93 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
             )
                 .into_response(),
         };
+    }
+
+    // Session auth: HMAC-based
+    if parts.headers.contains_key("x-payment-session") {
+        let request_hash = paygate_common::hash::request_hash(&method, &path, &body_bytes);
+        match sessions::verify_and_deduct(&state, &parts.headers, &request_hash, &endpoint).await {
+            Ok(deduction) => {
+                let req = Request::from_parts(parts, Body::from(body_bytes));
+                return match crate::proxy::forward_request(&state, req, "", deduction.amount_deducted, &endpoint).await {
+                    Ok(mut resp) => {
+                        // no_charge_on_5xx refund — skip dynamic pricing if refunded
+                        let refunded_5xx = if resp.status().is_server_error() && config.is_no_charge_on_5xx(&endpoint) {
+                            let _ = state.db_writer.refund_session_balance(&deduction.session_id, deduction.amount_deducted).await;
+                            resp.headers_mut().insert("X-Payment-Refunded", HeaderValue::from_static("true"));
+                            true
+                        } else { false };
+
+                        // Dynamic pricing adjustment (session auth only, skip if already refunded)
+                        let final_cost = if !refunded_5xx && config.pricing.dynamic.enabled {
+                            if let Some(token_count_header) = resp.headers().get(&config.pricing.dynamic.header_source) {
+                                if let Ok(token_count_str) = token_count_header.to_str() {
+                                    if let Ok(token_count) = token_count_str.parse::<u64>() {
+                                        let dynamic_cost = config.pricing.dynamic.compute_cost(token_count);
+
+                                        if dynamic_cost > deduction.amount_deducted {
+                                            let diff = dynamic_cost - deduction.amount_deducted;
+                                            let _ = sessions::deduct_additional(&state, &deduction.session_id, diff).await;
+                                        } else if dynamic_cost < deduction.amount_deducted {
+                                            let diff = deduction.amount_deducted - dynamic_cost;
+                                            let _ = state.db_writer.refund_session_balance(&deduction.session_id, diff).await;
+                                        }
+
+                                        // Update X-Payment-Cost header to reflect actual cost
+                                        let cost_decimal = format!("{:.6}", dynamic_cost as f64 / 1_000_000.0);
+                                        if let Ok(v) = HeaderValue::from_str(&cost_decimal) {
+                                            resp.headers_mut().insert("X-Payment-Cost", v);
+                                        }
+
+                                        dynamic_cost
+                                    } else { deduction.amount_deducted }
+                                } else { deduction.amount_deducted }
+                            } else { deduction.amount_deducted }
+                        } else { deduction.amount_deducted };
+
+                        let _ = state.db_writer.log_request(
+                            None,
+                            Some(deduction.session_id),
+                            endpoint,
+                            deduction.payer_address,
+                            final_cost,
+                            Some(resp.status().as_u16() as i32),
+                            None,
+                        ).await;
+                        resp
+                    }
+                    Err(ProxyError::Timeout) => (
+                        StatusCode::GATEWAY_TIMEOUT,
+                        Json(json!({"error": "upstream timeout"})),
+                    ).into_response(),
+                    Err(ProxyError::PayloadTooLarge) => (
+                        StatusCode::BAD_GATEWAY,
+                        Json(json!({"error": "response too large"})),
+                    ).into_response(),
+                    Err(e) => (
+                        StatusCode::BAD_GATEWAY,
+                        Json(json!({"error": format!("upstream error: {e}")})),
+                    ).into_response(),
+                };
+            }
+            Err(sessions::SessionError::InsufficientBalance { balance, rate }) => {
+                return (StatusCode::PAYMENT_REQUIRED, Json(json!({
+                    "error": "insufficient_session_balance",
+                    "message": "Session balance too low",
+                    "balance": balance,
+                    "rate_per_request": rate,
+                }))).into_response();
+            }
+            Err(sessions::SessionError::InvalidSignature) | Err(sessions::SessionError::StaleTimestamp) => {
+                return (StatusCode::FORBIDDEN, Json(json!({"error": "invalid_session_auth"}))).into_response();
+            }
+            Err(sessions::SessionError::SessionNotFound) | Err(sessions::SessionError::SessionExpired) => {
+                return (StatusCode::PAYMENT_REQUIRED, Json(json!({"error": "session_expired_or_not_found"}))).into_response();
+            }
+            Err(_) => {
+                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "session_error"}))).into_response();
+            }
+        }
     }
 
     // Extract client IP for rate limiting (from X-Forwarded-For or fallback)
@@ -609,6 +700,7 @@ mod tests {
                 },
                 dynamic: Default::default(),
                 tiers: Default::default(),
+                no_charge_on_5xx: Vec::new(),
             },
             rate_limiting: Default::default(),
             security: Default::default(),
@@ -695,6 +787,7 @@ mod tests {
                 },
                 dynamic: Default::default(),
                 tiers: Default::default(),
+                no_charge_on_5xx: Vec::new(),
             },
             rate_limiting: Default::default(),
             security: Default::default(),

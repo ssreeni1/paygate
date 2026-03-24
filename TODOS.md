@@ -6,11 +6,15 @@
 
 ## Non-blocking
 
-### Split main.rs into modules
-- **What:** Extract CLI commands, gateway handler, and tests from main.rs (~1900 LOC) into separate files.
-- **Why:** main.rs does too much — CLI arg parsing, gateway handler, middleware wiring, all test functions. Hard to navigate, will get worse with Wave 2 features.
-- **Context:** Retro flagged this. Extract `cli/serve.rs`, `cli/init.rs`, `cli/revenue.rs`, etc.
-- **Depends on:** Nothing.
+### Session top-up (deposit more to existing session)
+- **What:** Allow consumers to add funds to an active session without creating a new one.
+- **Why:** Currently sessions expire when balance hits 0 — consumer must create a new session with a new deposit. Top-up avoids the nonce/deposit/create roundtrip.
+- **Depends on:** Sessions (v0.4.0).
+
+### `paygate sessions` CLI usage graph
+- **What:** Add usage visualization to the `paygate sessions` CLI command — show balance over time, requests/minute.
+- **Why:** Developers want to see session utilization patterns to optimize deposit amounts.
+- **Depends on:** Sessions (v0.4.0).
 
 ### Publish create-paygate to npm
 - **What:** Publish the `packages/create-paygate` package to npm so `npx create-paygate` works.
@@ -59,3 +63,6 @@
 
 ### Railway RPC connectivity
 - **Status:** DONE v0.3.0 — Node.js RPC proxy at `localhost:3001/rpc` relays Tempo calls for the Rust gateway. 6 real payments verified on deployed Railway instance.
+
+### Split main.rs into modules
+- **Status:** DONE v0.3.0 — main.rs (2785 LOC) split into serve.rs + cli.rs + helpers.rs. main.rs now 114 LOC.

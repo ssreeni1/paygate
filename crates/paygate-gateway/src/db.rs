@@ -25,6 +25,33 @@ pub struct SessionRecord {
     pub expires_at: i64,
 }
 
+/// Full session record for DB operations.
+#[derive(Debug, Clone)]
+pub struct FullSessionRecord {
+    pub id: String,
+    pub secret: String,
+    pub payer_address: String,
+    pub deposit_tx: String,
+    pub nonce: String,
+    pub deposit_amount: u64,
+    pub balance: u64,
+    pub rate_per_request: u64,
+    pub requests_made: u64,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub status: String,
+}
+
+/// Nonce record for session creation.
+#[derive(Debug, Clone)]
+pub struct NonceRecord {
+    pub nonce: String,
+    pub payer_address: String,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub consumed: bool,
+}
+
 /// Commands sent to the single-writer task via bounded mpsc channel.
 #[derive(Debug)]
 pub enum WriteCommand {
@@ -37,6 +64,25 @@ pub enum WriteCommand {
     },
     ConsumeQuote {
         id: String,
+    },
+    CreateSessionNonce {
+        payer: String,
+        nonce: String,
+        expires_at: i64,
+    },
+    CreateSession {
+        record: FullSessionRecord,
+        payment: PaymentRecord,
+        reply: tokio::sync::oneshot::Sender<Result<(), DbError>>,
+    },
+    DeductSessionBalance {
+        id: String,
+        amount: u64,
+        reply: tokio::sync::oneshot::Sender<Result<bool, DbError>>,
+    },
+    RefundSessionBalance {
+        id: String,
+        amount: u64,
     },
     InsertRequestLog {
         payment_id: Option<String>,
@@ -271,6 +317,104 @@ impl DbReader {
         )?;
         Ok(count as u64)
     }
+    /// Look up a session nonce.
+    pub fn get_session_nonce(&self, nonce: &str) -> Result<Option<NonceRecord>, DbError> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT nonce, payer_address, created_at, expires_at, consumed
+             FROM session_nonces WHERE nonce = ?",
+        )?;
+        let result = stmt.query_row(params![nonce], |row| {
+            Ok(NonceRecord {
+                nonce: row.get(0)?,
+                payer_address: row.get(1)?,
+                created_at: row.get(2)?,
+                expires_at: row.get(3)?,
+                consumed: row.get::<_, i64>(4)? != 0,
+            })
+        });
+        match result {
+            Ok(n) => Ok(Some(n)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(DbError::Sqlite(e)),
+        }
+    }
+
+    /// Look up a full session by ID.
+    pub fn get_session(&self, id: &str) -> Result<Option<FullSessionRecord>, DbError> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, secret, payer_address, deposit_tx, nonce, deposit_amount, balance,
+                    rate_per_request, requests_made, created_at, expires_at, status
+             FROM sessions WHERE id = ?",
+        )?;
+        let result = stmt.query_row(params![id], |row| {
+            Ok(FullSessionRecord {
+                id: row.get(0)?,
+                secret: row.get(1)?,
+                payer_address: row.get(2)?,
+                deposit_tx: row.get(3)?,
+                nonce: row.get(4)?,
+                deposit_amount: row.get::<_, i64>(5)? as u64,
+                balance: row.get::<_, i64>(6)? as u64,
+                rate_per_request: row.get::<_, i64>(7)? as u64,
+                requests_made: row.get::<_, i64>(8)? as u64,
+                created_at: row.get(9)?,
+                expires_at: row.get(10)?,
+                status: row.get(11)?,
+            })
+        });
+        match result {
+            Ok(s) => Ok(Some(s)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(DbError::Sqlite(e)),
+        }
+    }
+
+    /// List sessions for a specific payer address.
+    pub fn list_sessions_for_payer(&self, payer: &str) -> Result<Vec<FullSessionRecord>, DbError> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().timestamp();
+        let mut stmt = conn.prepare(
+            "SELECT id, secret, payer_address, deposit_tx, nonce, deposit_amount, balance,
+                    rate_per_request, requests_made, created_at, expires_at, status
+             FROM sessions WHERE payer_address = ? AND status = 'active' AND expires_at > ?
+             ORDER BY created_at DESC",
+        )?;
+        let rows = stmt.query_map(params![payer, now], |row| {
+            Ok(FullSessionRecord {
+                id: row.get(0)?,
+                secret: row.get(1)?,
+                payer_address: row.get(2)?,
+                deposit_tx: row.get(3)?,
+                nonce: row.get(4)?,
+                deposit_amount: row.get::<_, i64>(5)? as u64,
+                balance: row.get::<_, i64>(6)? as u64,
+                rate_per_request: row.get::<_, i64>(7)? as u64,
+                requests_made: row.get::<_, i64>(8)? as u64,
+                created_at: row.get(9)?,
+                expires_at: row.get(10)?,
+                status: row.get(11)?,
+            })
+        })?;
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row?);
+        }
+        Ok(result)
+    }
+
+    /// Count active sessions for a specific payer.
+    pub fn count_active_sessions_for_payer(&self, payer: &str) -> Result<u64, DbError> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().timestamp();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sessions WHERE payer_address = ? AND status = 'active' AND expires_at > ?",
+            params![payer, now],
+            |row| row.get(0),
+        )?;
+        Ok(count as u64)
+    }
 }
 
 /// Writer task handle. Send commands through this.
@@ -337,6 +481,59 @@ impl DbWriter {
                 amount_charged,
                 upstream_status,
                 upstream_latency_ms,
+            })
+            .map_err(|e| match e {
+                mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
+                mpsc::error::TrySendError::Closed(_) => DbError::ChannelClosed,
+            })?;
+        Ok(())
+    }
+
+    /// Create a session nonce (fire-and-forget).
+    pub async fn create_session_nonce(&self, payer: String, nonce: String, expires_at: i64) -> Result<(), DbError> {
+        self.tx
+            .try_send(WriteCommand::CreateSessionNonce { payer, nonce, expires_at })
+            .map_err(|e| match e {
+                mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
+                mpsc::error::TrySendError::Closed(_) => DbError::ChannelClosed,
+            })?;
+        Ok(())
+    }
+
+    /// Create a session + mark nonce consumed + insert payment record (atomic, awaits result).
+    pub async fn create_session(&self, record: FullSessionRecord, payment: PaymentRecord) -> Result<(), DbError> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .try_send(WriteCommand::CreateSession { record, payment, reply: reply_tx })
+            .map_err(|e| match e {
+                mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
+                mpsc::error::TrySendError::Closed(_) => DbError::ChannelClosed,
+            })?;
+        reply_rx.await.map_err(|_| DbError::ChannelClosed)?
+    }
+
+    /// Atomically deduct session balance. Returns true if deducted, false if insufficient/expired.
+    pub async fn deduct_session_balance(&self, id: &str, amount: u64) -> Result<bool, DbError> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .try_send(WriteCommand::DeductSessionBalance {
+                id: id.to_string(),
+                amount,
+                reply: reply_tx,
+            })
+            .map_err(|e| match e {
+                mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
+                mpsc::error::TrySendError::Closed(_) => DbError::ChannelClosed,
+            })?;
+        reply_rx.await.map_err(|_| DbError::ChannelClosed)?
+    }
+
+    /// Refund session balance (fire-and-forget, used for no_charge_on_5xx).
+    pub async fn refund_session_balance(&self, id: &str, amount: u64) -> Result<(), DbError> {
+        self.tx
+            .try_send(WriteCommand::RefundSessionBalance {
+                id: id.to_string(),
+                amount,
             })
             .map_err(|e| match e {
                 mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
@@ -473,6 +670,84 @@ fn flush_batch(conn: &Connection, batch: &mut Vec<WriteCommand>) {
             }
             WriteCommand::ConsumeQuote { id } => {
                 let _ = conn.execute("DELETE FROM quotes WHERE id = ?", params![id]);
+            }
+            WriteCommand::CreateSessionNonce { payer, nonce, expires_at } => {
+                let now = chrono::Utc::now().timestamp();
+                let _ = conn.execute(
+                    "INSERT INTO session_nonces (nonce, payer_address, created_at, expires_at, consumed)
+                     VALUES (?, ?, ?, ?, 0)",
+                    params![nonce, payer, now, expires_at],
+                );
+            }
+            WriteCommand::CreateSession { record, payment, reply } => {
+                // Use savepoint for atomicity: all 3 ops succeed or all roll back
+                let result = (|| -> Result<(), DbError> {
+                    conn.execute_batch("SAVEPOINT create_session")?;
+
+                    // 1. Consume nonce (WHERE consumed=0 prevents double-spend)
+                    let nonce_rows = conn.execute(
+                        "UPDATE session_nonces SET consumed = 1 WHERE nonce = ? AND consumed = 0",
+                        params![record.nonce],
+                    ).map_err(DbError::Sqlite)?;
+                    if nonce_rows == 0 {
+                        conn.execute_batch("ROLLBACK TO create_session")?;
+                        return Err(DbError::Sqlite(rusqlite::Error::QueryReturnedNoRows));
+                    }
+
+                    // 2. Insert session (UNIQUE on nonce + deposit_tx)
+                    conn.execute(
+                        "INSERT INTO sessions (id, secret, payer_address, deposit_tx, nonce,
+                         deposit_amount, balance, rate_per_request, requests_made,
+                         created_at, expires_at, status)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![
+                            record.id, record.secret, record.payer_address,
+                            record.deposit_tx, record.nonce,
+                            record.deposit_amount as i64, record.balance as i64,
+                            record.rate_per_request as i64, record.requests_made as i64,
+                            record.created_at, record.expires_at, record.status,
+                        ],
+                    ).map_err(|e| {
+                        let _ = conn.execute_batch("ROLLBACK TO create_session");
+                        DbError::Sqlite(e)
+                    })?;
+
+                    // 3. Insert payment for replay protection
+                    conn.execute(
+                        "INSERT INTO payments (id, tx_hash, payer_address, amount, token_address,
+                         endpoint, request_hash, quote_id, block_number, verified_at, status)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![
+                            payment.id, payment.tx_hash, payment.payer_address,
+                            payment.amount as i64, payment.token_address,
+                            payment.endpoint, payment.request_hash, payment.quote_id,
+                            payment.block_number as i64, payment.verified_at, payment.status,
+                        ],
+                    ).map_err(|e| {
+                        let _ = conn.execute_batch("ROLLBACK TO create_session");
+                        DbError::Sqlite(e)
+                    })?;
+
+                    conn.execute_batch("RELEASE create_session")?;
+                    Ok(())
+                })();
+                let _ = reply.send(result);
+            }
+            WriteCommand::DeductSessionBalance { id, amount, reply } => {
+                let now = chrono::Utc::now().timestamp();
+                let result = conn.execute(
+                    "UPDATE sessions SET balance = balance - ?, requests_made = requests_made + 1
+                     WHERE id = ? AND balance >= ? AND status = 'active' AND expires_at > ?",
+                    params![amount as i64, id, amount as i64, now],
+                );
+                let _ = reply.send(result.map(|rows| rows > 0).map_err(DbError::Sqlite));
+            }
+            WriteCommand::RefundSessionBalance { id, amount } => {
+                let _ = conn.execute(
+                    "UPDATE sessions SET balance = MIN(balance + ?, deposit_amount), requests_made = MAX(requests_made - 1, 0)
+                     WHERE id = ?",
+                    params![amount as i64, id],
+                );
             }
             WriteCommand::InsertRequestLog {
                 payment_id,

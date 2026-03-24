@@ -24,6 +24,11 @@ address = "0x002925FAFE98cfeB9fdBb7d6045ce318E4BD4b88"
 name = "PayGate Demo Marketplace"
 description = "Search, scrape, image generation, and summarization APIs"
 
+[sponsorship]
+enabled = true
+budget_per_day = "1.00"
+max_per_tx = "0.01"
+
 [pricing]
 default_price = "0.001"
 quote_ttl_seconds = 300
@@ -34,6 +39,13 @@ quote_ttl_seconds = 300
 "POST /v1/scrape" = "0.001"
 "POST /v1/image" = "0.01"
 "POST /v1/summarize" = "0.003"
+
+[pricing.dynamic]
+enabled = true
+formula = "token"
+base_cost_per_token = "0.00001"
+spread_per_token = "0.000005"
+header_source = "X-Token-Count"
 
 [rate_limiting]
 requests_per_second = 100

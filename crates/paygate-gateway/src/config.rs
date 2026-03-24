@@ -109,7 +109,7 @@ impl Default for SessionsConfig {
     fn default() -> Self {
         Self {
             enabled: true,
-            discount_percent: 50,
+            discount_percent: 0,
             minimum_deposit: "0.05".to_string(),
             max_duration_hours: 24,
             auto_refund: true,
@@ -130,6 +130,8 @@ pub struct PricingConfig {
     pub dynamic: DynamicPricingConfig,
     #[serde(default)]
     pub tiers: HashMap<String, String>,
+    #[serde(default)]
+    pub no_charge_on_5xx: Vec<String>,
 }
 
 impl Default for PricingConfig {
@@ -140,6 +142,7 @@ impl Default for PricingConfig {
             endpoints: HashMap::new(),
             dynamic: DynamicPricingConfig::default(),
             tiers: HashMap::new(),
+            no_charge_on_5xx: Vec::new(),
         }
     }
 }
@@ -149,11 +152,27 @@ pub struct DynamicPricingConfig {
     #[serde(default)]
     pub enabled: bool,
     #[serde(default)]
-    pub token_price: String,
+    pub formula: String,
     #[serde(default)]
-    pub compute_price: String,
+    pub base_cost_per_token: String,
     #[serde(default)]
+    pub spread_per_token: String,
+    #[serde(default = "default_header_source")]
     pub header_source: String,
+}
+
+fn default_header_source() -> String { "X-Token-Count".to_string() }
+
+impl DynamicPricingConfig {
+    /// Compute cost in base units for a given token count.
+    /// Parses base_cost_per_token and spread_per_token as f64 USD amounts,
+    /// multiplies by token_count, converts to base units (6 decimals).
+    pub fn compute_cost(&self, token_count: u64) -> u64 {
+        let base: f64 = self.base_cost_per_token.parse().unwrap_or(0.0);
+        let spread: f64 = self.spread_per_token.parse().unwrap_or(0.0);
+        let cost_usd = token_count as f64 * (base + spread);
+        (cost_usd * 1_000_000.0).round() as u64
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -234,7 +253,7 @@ fn default_chain_id() -> u64 { 4217 }
 fn default_private_key_env() -> String { "PAYGATE_PRIVATE_KEY".to_string() }
 fn default_sponsor_listen() -> String { "/paygate/sponsor".to_string() }
 fn default_true() -> bool { true }
-fn default_discount() -> u8 { 50 }
+fn default_discount() -> u8 { 0 }
 fn default_min_deposit() -> String { "0.05".to_string() }
 fn default_max_duration() -> u64 { 24 }
 fn default_max_concurrent() -> u32 { 5 }
@@ -298,6 +317,11 @@ impl Config {
         }
 
         Ok(())
+    }
+
+    /// Check if an endpoint has no_charge_on_5xx enabled.
+    pub fn is_no_charge_on_5xx(&self, endpoint: &str) -> bool {
+        self.pricing.no_charge_on_5xx.iter().any(|e| e == endpoint)
     }
 
     /// Get the price for an endpoint in base units.

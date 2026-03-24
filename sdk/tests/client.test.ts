@@ -145,4 +145,189 @@ describe('PayGateClient', () => {
     expect(response.status).toBe(200);
     expect(mockPayFunction).toHaveBeenCalledOnce();
   });
+
+  describe('auto-session', () => {
+    const MOCK_NONCE_RESPONSE = () =>
+      new Response(JSON.stringify({ nonce: 'nonce_abc' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+    const MOCK_SESSION_CREATE_RESPONSE = () =>
+      new Response(
+        JSON.stringify({
+          sessionId: 'sess_1',
+          sessionSecret: 'ssec_aabbccdd',
+          balance: '0.050000',
+          ratePerRequest: '0.000500',
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+
+    const MOCK_SESSION_EXHAUSTED_RESPONSE = () =>
+      new Response(
+        JSON.stringify({
+          error: 'insufficient_session_balance',
+          message: 'Session balance exhausted',
+        }),
+        { status: 402, headers: { 'Content-Type': 'application/json' } },
+      );
+
+    it('auto-session first call creates session', async () => {
+      const sessionClient = new PayGateClient({
+        payFunction: mockPayFunction,
+        payerAddress: '0xPayer',
+        autoSession: true,
+        sessionDeposit: '0.05',
+      });
+
+      const mockFetch = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(make402Response())       // 1. initial request -> 402
+        .mockResolvedValueOnce(MOCK_NONCE_RESPONSE())   // 2. nonce endpoint
+        .mockResolvedValueOnce(MOCK_SESSION_CREATE_RESPONSE()) // 3. session create
+        .mockResolvedValueOnce(make200Response());       // 4. retry with session headers
+
+      const response = await sessionClient.fetch('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4' }),
+      });
+
+      // payFunction was called for the session deposit
+      expect(mockPayFunction).toHaveBeenCalledOnce();
+
+      // Final response is 200
+      expect(response.status).toBe(200);
+
+      // fetch was called 4 times
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+
+      // The 4th call (retry) has session auth headers
+      const retryCall = mockFetch.mock.calls[3];
+      const retryInit = retryCall[1] as RequestInit;
+      const headers = retryInit.headers as Record<string, string>;
+      expect(headers['X-Payment-Session']).toBe('sess_1');
+      expect(headers['X-Payment-Session-Sig']).toBeDefined();
+      expect(headers['X-Payment-Session-Sig']).toMatch(/^[a-f0-9]+$/);
+      expect(headers['X-Payment-Timestamp']).toBeDefined();
+      expect(headers['X-Payment-Timestamp']).toMatch(/^\d+$/);
+    });
+
+    it('auto-session subsequent call uses HMAC without new payment', async () => {
+      const sessionClient = new PayGateClient({
+        payFunction: mockPayFunction,
+        payerAddress: '0xPayer',
+        autoSession: true,
+        sessionDeposit: '0.05',
+      });
+
+      // First call: creates session (4 fetch calls)
+      const mockFetch = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(make402Response())
+        .mockResolvedValueOnce(MOCK_NONCE_RESPONSE())
+        .mockResolvedValueOnce(MOCK_SESSION_CREATE_RESPONSE())
+        .mockResolvedValueOnce(make200Response());
+
+      await sessionClient.fetch('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4' }),
+      });
+
+      expect(mockPayFunction).toHaveBeenCalledOnce();
+
+      // Second call: should use existing session (1 fetch call, no payment)
+      mockFetch.mockResolvedValueOnce(make200Response('{"result":"second"}'));
+
+      const response2 = await sessionClient.fetch('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4', prompt: 'hello' }),
+      });
+
+      // payFunction was NOT called again
+      expect(mockPayFunction).toHaveBeenCalledOnce();
+
+      // The 5th fetch call (second request) has session headers
+      expect(mockFetch).toHaveBeenCalledTimes(5);
+      const secondCall = mockFetch.mock.calls[4];
+      const secondInit = secondCall[1] as RequestInit;
+      const headers = secondInit.headers as Record<string, string>;
+      expect(headers['X-Payment-Session']).toBe('sess_1');
+      expect(headers['X-Payment-Session-Sig']).toBeDefined();
+      expect(headers['X-Payment-Timestamp']).toBeDefined();
+
+      expect(response2.status).toBe(200);
+    });
+
+    it('session exhausted triggers auto-renew', async () => {
+      const sessionClient = new PayGateClient({
+        payFunction: mockPayFunction,
+        payerAddress: '0xPayer',
+        autoSession: true,
+        sessionDeposit: '0.05',
+      });
+
+      // First call: creates initial session
+      const mockFetch = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(make402Response())
+        .mockResolvedValueOnce(MOCK_NONCE_RESPONSE())
+        .mockResolvedValueOnce(MOCK_SESSION_CREATE_RESPONSE())
+        .mockResolvedValueOnce(make200Response());
+
+      await sessionClient.fetch('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4' }),
+      });
+
+      expect(mockPayFunction).toHaveBeenCalledOnce();
+
+      // Drain the session balance by setting it to 0 via repeated calls
+      // Instead, mock the gateway returning 402 with insufficient_session_balance
+      // This simulates the session being exhausted server-side
+      mockFetch
+        .mockResolvedValueOnce(MOCK_SESSION_EXHAUSTED_RESPONSE()) // 5. session auth rejected
+        .mockResolvedValueOnce(make402Response())                  // 6. re-request gets 402 with pricing
+        .mockResolvedValueOnce(MOCK_NONCE_RESPONSE())              // 7. new nonce
+        .mockResolvedValueOnce(MOCK_SESSION_CREATE_RESPONSE())     // 8. new session create
+        .mockResolvedValueOnce(make200Response('{"renewed":true}')); // 9. retry with new session
+
+      const response = await sessionClient.fetch('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4' }),
+      });
+
+      // payFunction called again for the new deposit
+      expect(mockPayFunction).toHaveBeenCalledTimes(2);
+
+      // New session created, final response is 200
+      expect(response.status).toBe(200);
+    });
+
+    it('non-auto-session mode uses direct payment without session headers', async () => {
+      // client from beforeEach has autoSession: false (default)
+      const mockFetch = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce(make402Response())
+        .mockResolvedValueOnce(make200Response('{"direct":true}'));
+
+      const response = await client.fetch('https://api.example.com/v1/chat/completions', {
+        method: 'POST',
+        body: JSON.stringify({ model: 'gpt-4' }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(mockPayFunction).toHaveBeenCalledOnce();
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      // Verify retry has direct payment headers, NOT session headers
+      const retryCall = mockFetch.mock.calls[1];
+      const retryInit = retryCall[1] as RequestInit;
+      const headers = retryInit.headers as Record<string, string>;
+      expect(headers['X-Payment-Tx']).toBe('0xtxhash123');
+      expect(headers['X-Payment-Payer']).toBe('0xPayer');
+      expect(headers['X-Payment-Quote-Id']).toBe('qt_test123');
+
+      // No session headers
+      expect(headers['X-Payment-Session']).toBeUndefined();
+      expect(headers['X-Payment-Session-Sig']).toBeUndefined();
+      expect(headers['X-Payment-Timestamp']).toBeUndefined();
+    });
+  });
 });

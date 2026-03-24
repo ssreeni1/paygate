@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     id              TEXT PRIMARY KEY,
     secret          TEXT NOT NULL,
     payer_address   TEXT NOT NULL,
-    deposit_tx      TEXT NOT NULL,
-    nonce           TEXT NOT NULL,
+    deposit_tx      TEXT UNIQUE NOT NULL,
+    nonce           TEXT UNIQUE NOT NULL,
     deposit_amount  INTEGER NOT NULL,
     balance         INTEGER NOT NULL,
     rate_per_request INTEGER NOT NULL,
@@ -41,6 +41,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     status          TEXT NOT NULL DEFAULT 'active'
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_payer ON sessions(payer_address);
+
+CREATE TABLE IF NOT EXISTS session_nonces (
+    nonce       TEXT PRIMARY KEY,
+    payer_address TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    expires_at  INTEGER NOT NULL,
+    consumed    INTEGER NOT NULL DEFAULT 0
+);
 
 CREATE TABLE IF NOT EXISTS request_log (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,

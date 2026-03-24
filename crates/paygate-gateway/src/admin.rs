@@ -297,6 +297,7 @@ mod tests {
                 },
                 dynamic: Default::default(),
                 tiers: Default::default(),
+                no_charge_on_5xx: Vec::new(),
             },
             rate_limiting: Default::default(),
             security: Default::default(),

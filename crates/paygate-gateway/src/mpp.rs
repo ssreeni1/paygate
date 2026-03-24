@@ -58,20 +58,27 @@ pub async fn payment_required_response(state: &AppState, endpoint: &str) -> Resp
     let amount_str = format_amount(price, TOKEN_DECIMALS);
     let provider_addr = &config.provider.address;
 
+    let mut pricing = json!({
+        "amount": amount_str,
+        "amount_base_units": price,
+        "decimals": TOKEN_DECIMALS,
+        "token": config.tempo.accepted_token,
+        "recipient": provider_addr,
+        "quote_id": quote_id,
+        "quote_expires_at": expires_at.to_rfc3339(),
+        "methods": ["direct", "session"]
+    });
+
+    if config.pricing.dynamic.enabled {
+        pricing["dynamic"] = json!(true);
+        pricing["note"] = json!("Estimated price. Actual cost varies by response token count. Requires an active session.");
+    }
+
     let body = json!({
         "error": "payment_required",
         "message": format!("Send {amount_str} USDC to {provider_addr} on Tempo, then retry with X-Payment-Tx header."),
         "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
-        "pricing": {
-            "amount": amount_str,
-            "amount_base_units": price,
-            "decimals": TOKEN_DECIMALS,
-            "token": config.tempo.accepted_token,
-            "recipient": provider_addr,
-            "quote_id": quote_id,
-            "quote_expires_at": expires_at.to_rfc3339(),
-            "methods": ["direct", "session"]
-        }
+        "pricing": pricing
     });
 
     let mut response = (StatusCode::PAYMENT_REQUIRED, Json(body)).into_response();
@@ -154,6 +161,7 @@ mod tests {
                 endpoints: HashMap::new(),
                 dynamic: Default::default(),
                 tiers: Default::default(),
+                no_charge_on_5xx: Vec::new(),
             },
             rate_limiting: Default::default(),
             security: Default::default(),
