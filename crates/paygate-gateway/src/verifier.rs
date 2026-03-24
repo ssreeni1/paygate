@@ -39,7 +39,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 /// Make a JSON-RPC call with failover across configured RPC URLs.
-async fn rpc_call(
+pub(crate) async fn rpc_call(
     http_client: &reqwest::Client,
     rpc_urls: &[String],
     timeout_ms: u64,
@@ -487,6 +487,7 @@ mod tests {
                 },
                 dynamic: Default::default(),
                 tiers: Default::default(),
+                no_charge_on_5xx: Vec::new(),
             },
             rate_limiting: Default::default(),
             security: Default::default(),

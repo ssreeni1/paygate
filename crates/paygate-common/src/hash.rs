@@ -14,6 +14,16 @@ pub fn request_hash(method: &str, path: &str, body: &[u8]) -> B256 {
     keccak256(&input)
 }
 
+/// Compute session deposit memo = keccak256("paygate-session" || nonce).
+///
+/// Used to bind a session deposit transaction to a server-issued nonce.
+pub fn session_deposit_memo(nonce: &str) -> B256 {
+    let mut input = Vec::with_capacity(15 + nonce.len());
+    input.extend_from_slice(b"paygate-session");
+    input.extend_from_slice(nonce.as_bytes());
+    keccak256(&input)
+}
+
 /// Compute memo = keccak256("paygate" || quoteId || requestHash).
 ///
 /// Inputs are UTF-8 encoded and concatenated as raw bytes before hashing.

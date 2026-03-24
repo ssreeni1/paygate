@@ -9,6 +9,7 @@ mod proxy;
 mod rate_limit;
 mod serve;
 mod server;
+mod sessions;
 mod sponsor;
 mod verifier;
 mod webhook;
