@@ -25,12 +25,22 @@ Part B (SDK Auto-Session):
 5. Update sdk/src/hash.ts — add sessionMemo() and hmacSha256() functions
 6. Update sdk/src/client.ts — add session state, createSession(), computeSessionHeaders(), update fetch() with auto-session logic
 7. Run `npm run build` (or equivalent) — fix all TypeScript errors
-8. Write tests in sdk/tests/client.test.ts — at least 6 tests covering auto-session lifecycle
-9. Run `npm test` — all tests must pass
+8. **Codex quality + security review (iteration 1):** Run:
+   ```bash
+   codex exec "Review the changes on this branch. Run git diff main to see the diff. Focus on: 1) HMAC-SHA256 implementation correctness in TypeScript (proper key encoding, constant-time comparison if applicable), 2) Session secret handling (is the secret stored safely in memory? cleared after use?), 3) Auto-session state management (race conditions if multiple requests fire concurrently), 4) Input validation on session responses from gateway, 5) Any credentials or secrets that could leak in error messages or logs. For each finding: severity (critical/high/medium/low), file:line, and recommended fix. Be adversarial." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-sponsorship-review-1.txt
+   ```
+   Fix any critical or high severity findings before proceeding.
+9. Write tests in sdk/tests/client.test.ts — at least 6 tests covering auto-session lifecycle
+10. Run `npm test` — all tests must pass
+11. **Codex quality + security review (iteration 2):** Run:
+    ```bash
+    codex exec "Review the changes on this branch. Run git diff main to see the diff. This is a SECOND pass — focus on: 1) Test coverage gaps, 2) Edge cases (session expiry mid-request, deposit verification failure, network timeout during session creation), 3) Fee sponsorship config — could a malicious consumer drain the sponsor wallet?, 4) Any new issues from first-review fixes. For each finding: severity, file:line, recommended fix." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-sponsorship-review-2.txt
+    ```
+    Fix any critical or high severity findings.
 
 Important: The auto-session feature depends on the sessions endpoints built by Pane 1 (POST /paygate/sessions/nonce and POST /paygate/sessions). Your SDK code calls these endpoints. Make sure the request format matches what the brief specifies:
 - Nonce request: POST with X-Payment-Payer header
 - Session creation: POST with X-Payment-Tx, X-Payment-Payer headers and JSON body { "nonce": "..." }
 - Session auth: X-Payment-Session, X-Payment-Session-Sig (HMAC-SHA256), X-Payment-Timestamp headers
 
-Commit your work with a descriptive message when done. The commit message should mention "SDK auto-session" and "fee sponsorship E2E".
+Commit your work with a descriptive message when done. The commit message should mention "SDK auto-session", "fee sponsorship E2E", and "Codex-reviewed".

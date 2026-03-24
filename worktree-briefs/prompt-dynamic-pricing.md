@@ -24,8 +24,13 @@ Part A (Dynamic Pricing Gateway):
 3. Update sessions.rs — add deduct_additional() helper
 4. Update mpp.rs — add dynamic pricing note to 402 response when dynamic pricing is enabled
 5. Run `cargo check` — fix all errors
-6. Write 5 tests for dynamic pricing logic
-7. Run `cargo test` — all tests must pass
+6. **Codex quality + security review (iteration 1 — gateway):** Run:
+   ```bash
+   codex exec "Review the changes on this branch. Run git diff main to see the diff. Focus on: 1) Dynamic pricing arithmetic — floating point precision, overflow on large token counts, rounding behavior, 2) Can a malicious upstream spoof X-Token-Count to drain session balance?, 3) Race condition between initial deduction and dynamic adjustment, 4) Config validation — what if base_cost + spread = 0? Negative values?, 5) 402 response for dynamic endpoints — does it leak pricing internals? For each finding: severity (critical/high/medium/low), file:line, and recommended fix. Be adversarial." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-dynamic-review-1.txt
+   ```
+   Fix any critical or high severity findings before proceeding.
+7. Write 5 tests for dynamic pricing logic
+8. Run `cargo test` — all tests must pass
 
 Part B (Demo Server Headers):
 8. Update demo/src/routes/summarize.ts — add X-Token-Count response header
@@ -39,4 +44,9 @@ Part C (Session Balance Widget):
 14. Test the widget manually if possible
 
 15. Run full test suite: `cargo test` and verify demo server builds
-16. Commit with descriptive message mentioning "dynamic pricing", "X-Token-Count", and "session balance widget"
+16. **Codex quality + security review (iteration 2 — full diff):** Run:
+    ```bash
+    codex exec "Review the changes on this branch. Run git diff main to see the diff. This is a FINAL pass covering gateway + demo + marketplace widget. Focus on: 1) XSS in session balance widget (is balance data sanitized before DOM insertion?), 2) Polling security (can the GET /paygate/sessions endpoint leak other users' session data?), 3) Test coverage gaps, 4) Demo server X-Token-Count — could it be manipulated by upstream response?, 5) Any issues across the full diff. For each finding: severity, file:line, recommended fix." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-dynamic-review-2.txt
+    ```
+    Fix any critical or high severity findings.
+17. Commit with descriptive message mentioning "dynamic pricing", "X-Token-Count", "session balance widget", and "Codex-reviewed"

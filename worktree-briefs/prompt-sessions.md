@@ -23,7 +23,17 @@ Build order:
 6. Register mod sessions in main.rs or lib.rs
 7. Add crate dependencies if needed (hmac, sha2, rand)
 8. Run `cargo check` — fix all errors
-9. Write all 10 tests in sessions.rs
-10. Run `cargo test` — all tests must pass
+9. **Codex quality + security review (iteration 1):** Run:
+   ```bash
+   codex exec "Review the changes on this branch. Run git diff main to see the diff. Focus on: 1) HMAC implementation correctness (constant-time comparison, proper key derivation), 2) SQL injection or SQLite safety issues, 3) Race conditions in session balance deduction, 4) Timing attacks on session secret, 5) Integer overflow in balance arithmetic. For each finding: severity (critical/high/medium/low), file:line, and recommended fix. Be adversarial." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-sessions-review-1.txt
+   ```
+   Fix any critical or high severity findings before proceeding.
+10. Write all 10 tests in sessions.rs
+11. Run `cargo test` — all tests must pass
+12. **Codex quality + security review (iteration 2):** Run:
+    ```bash
+    codex exec "Review the changes on this branch. Run git diff main to see the diff. This is a SECOND pass — focus on: 1) Test coverage gaps (are there untested error paths?), 2) Edge cases in session expiry, concurrent deduction, zero-balance handling, 3) Any new issues introduced by fixes from the first review, 4) Memory safety concerns. For each finding: severity, file:line, recommended fix." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-sessions-review-2.txt
+    ```
+    Fix any critical or high severity findings.
 
-Commit your work with a descriptive message when done. The commit message should mention "sessions protocol", "HMAC auth", and "no_charge_on_5xx".
+Commit your work with a descriptive message when done. The commit message should mention "sessions protocol", "HMAC auth", "no_charge_on_5xx", and "Codex-reviewed".
