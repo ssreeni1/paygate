@@ -47,6 +47,11 @@ base_cost_per_token = "0.00001"
 spread_per_token = "0.000005"
 header_source = "X-Token-Count"
 
+[governance]
+enabled = true
+default_daily_limit = "10.00"
+default_monthly_limit = "100.00"
+
 [rate_limiting]
 requests_per_second = 100
 per_payer_per_second = 10
