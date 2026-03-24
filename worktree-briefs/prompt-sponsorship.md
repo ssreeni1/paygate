@@ -13,24 +13,37 @@ Before writing any code, read these files:
 
 You are on a feature branch in a git worktree for sponsorship + SDK auto-session.
 
-Build order:
+## Parallelization Strategy
 
-Part A (Sponsorship E2E):
-1. Update demo/paygate.toml — add [sponsorship] section with enabled = true
-2. Create sdk/sponsor-e2e.mjs — standalone E2E test script
-3. Test locally if possible, or document how to run against deployed instance
+Part A and Part B are completely independent. Use subagents to build both simultaneously.
 
-Part B (SDK Auto-Session):
-4. Update sdk/src/types.ts — add autoSession, sessionDeposit to PayGateClientOptions, add session response types
-5. Update sdk/src/hash.ts — add sessionMemo() and hmacSha256() functions
-6. Update sdk/src/client.ts — add session state, createSession(), computeSessionHeaders(), update fetch() with auto-session logic
+**Phase 1 — Parallel build (launch 2 subagents simultaneously):**
+
+- **Subagent A (Sponsorship E2E):**
+  1. Update demo/paygate.toml — add [sponsorship] section with enabled = true
+  2. Create sdk/sponsor-e2e.mjs — standalone E2E test script
+  3. Document how to run against deployed instance
+
+- **Subagent B (SDK Auto-Session — types + hash):**
+  4. Update sdk/src/types.ts — add autoSession, sessionDeposit to PayGateClientOptions, add session response types (SessionNonceResponse, SessionCreateResponse, SessionInfo)
+  5. Update sdk/src/hash.ts — add sessionMemo() and hmacSha256() functions
+
+Wait for both to complete.
+
+**Phase 2 — Client logic (depends on Subagent B):**
+6. Update sdk/src/client.ts — add session state, createSession(), computeSessionHeaders(), hasActiveSession(), invalidateSession(), update fetch() with auto-session logic
 7. Run `npm run build` (or equivalent) — fix all TypeScript errors
 8. **Codex quality + security review (iteration 1):** Run:
    ```bash
    codex exec "Review the changes on this branch. Run git diff main to see the diff. Focus on: 1) HMAC-SHA256 implementation correctness in TypeScript (proper key encoding, constant-time comparison if applicable), 2) Session secret handling (is the secret stored safely in memory? cleared after use?), 3) Auto-session state management (race conditions if multiple requests fire concurrently), 4) Input validation on session responses from gateway, 5) Any credentials or secrets that could leak in error messages or logs. For each finding: severity (critical/high/medium/low), file:line, and recommended fix. Be adversarial." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-sponsorship-review-1.txt
    ```
    Fix any critical or high severity findings before proceeding.
-9. Write tests in sdk/tests/client.test.ts — at least 6 tests covering auto-session lifecycle
+**Phase 3 — Tests (parallel subagents):**
+Launch 2 subagents simultaneously:
+- **Subagent C**: Tests 1-3 (auto-session first call creates session, subsequent call uses HMAC, session exhausted triggers auto-renew)
+- **Subagent D**: Tests 4-6 (non-auto-session mode unchanged, sessionMemo produces correct hash, hmacSha256 produces correct signature)
+
+After both complete, merge test code and run:
 10. Run `npm test` — all tests must pass
 11. **Codex quality + security review (iteration 2):** Run:
     ```bash

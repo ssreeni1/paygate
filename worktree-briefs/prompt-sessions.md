@@ -14,21 +14,36 @@ Before writing any code, read these files:
 
 You are on a feature branch in a git worktree for sessions.
 
-Build order:
-1. Update schema.sql — add session_nonces table
-2. Update config.rs — change discount_percent default to 0, add no_charge_on_5xx vec and helper
-3. Update db.rs — add FullSessionRecord, NonceRecord structs, WriteCommand variants, DbReader queries, DbWriter methods
-4. Create sessions.rs — handle_nonce, handle_create_session, verify_and_deduct, SessionDeduction, SessionError
-5. Update serve.rs — add session route wiring in cmd_serve, add session auth branch in gateway_handler with no_charge_on_5xx
-6. Register mod sessions in main.rs or lib.rs
-7. Add crate dependencies if needed (hmac, sha2, rand)
+## Parallelization Strategy
+
+Use subagents (the Agent tool) to parallelize independent work. This is a large feature — maximize throughput.
+
+**Phase 1 — Foundation (parallel subagents):**
+Launch 3 subagents simultaneously:
+- **Subagent A**: Update schema.sql (add session_nonces table) + update config.rs (discount_percent default to 0, add no_charge_on_5xx vec and helper) + add crate dependencies to Cargo.toml (hmac, sha2, rand)
+- **Subagent B**: Update db.rs — add FullSessionRecord, NonceRecord structs, WriteCommand variants (CreateSessionNonce, CreateSession, DeductSessionBalance, RefundSessionBalance), DbReader queries (get_session_nonce, get_session, count_active_sessions_for_payer), DbWriter methods
+- **Subagent C**: Create sessions.rs skeleton — define SessionDeduction struct, SessionError enum, function signatures for handle_nonce, handle_create_session, verify_and_deduct with TODO bodies
+
+Wait for all 3 to complete.
+
+**Phase 2 — Core logic (sequential, depends on Phase 1):**
+- Fill in sessions.rs function bodies (handle_nonce, handle_create_session, verify_and_deduct, no_charge_on_5xx refund logic)
+- Update serve.rs — add session route wiring + session auth branch in gateway_handler
+- Register `mod sessions` in main.rs
+
+**Phase 3 — Verify + Review:**
 8. Run `cargo check` — fix all errors
 9. **Codex quality + security review (iteration 1):** Run:
    ```bash
    codex exec "Review the changes on this branch. Run git diff main to see the diff. Focus on: 1) HMAC implementation correctness (constant-time comparison, proper key derivation), 2) SQL injection or SQLite safety issues, 3) Race conditions in session balance deduction, 4) Timing attacks on session secret, 5) Integer overflow in balance arithmetic. For each finding: severity (critical/high/medium/low), file:line, and recommended fix. Be adversarial." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-sessions-review-1.txt
    ```
    Fix any critical or high severity findings before proceeding.
-10. Write all 10 tests in sessions.rs
+**Phase 4 — Tests (parallel subagents):**
+Launch 2 subagents simultaneously to write tests in sessions.rs `#[cfg(test)] mod tests`:
+- **Subagent D**: Tests 1-5 (nonce happy path, max concurrent exceeded, create session with valid deposit, invalid nonce, HMAC verification happy path)
+- **Subagent E**: Tests 6-10 (invalid HMAC, stale timestamp, insufficient balance, session expired, no_charge_on_5xx refund)
+
+After both complete, merge their test code into sessions.rs and run:
 11. Run `cargo test` — all tests must pass
 12. **Codex quality + security review (iteration 2):** Run:
     ```bash

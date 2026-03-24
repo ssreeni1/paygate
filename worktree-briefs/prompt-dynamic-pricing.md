@@ -16,33 +16,43 @@ Before writing any code, read these files:
 
 You are on a feature branch for dynamic pricing, branched from main AFTER sessions merge.
 
-Build order:
+## Parallelization Strategy
 
-Part A (Dynamic Pricing Gateway):
-1. Update config.rs — add compute_cost() to DynamicPricingConfig, add default_header_source, update field names to match spec (base_cost_per_token, spread_per_token)
+Parts A, B, and C are mostly independent. Use subagents to maximize throughput.
+
+**Phase 1 — Foundation (3 parallel subagents):**
+
+- **Subagent A (Gateway config + helpers):**
+  1. Update config.rs — add compute_cost() to DynamicPricingConfig, add default_header_source, update field names to match spec (base_cost_per_token, spread_per_token)
+  3. Update sessions.rs — add deduct_additional() helper
+  4. Update mpp.rs — add dynamic pricing note to 402 response when dynamic pricing is enabled
+
+- **Subagent B (Demo server headers):**
+  8. Update demo/src/routes/summarize.ts — add X-Token-Count response header
+  9. Update demo/src/routes/search.ts — add X-Token-Count response header
+  10. Update demo/paygate.toml — add [pricing.dynamic] config section
+
+- **Subagent C (Session balance widget — backend + frontend):**
+  11. Add GET /paygate/sessions route — handle_get_sessions handler + list_sessions_for_payer DB query in sessions.rs and db.rs
+  13. Update docs/marketplace.html — add session balance widget HTML/CSS/JS with 5-second polling
+
+Wait for all 3 to complete.
+
+**Phase 2 — Integration (depends on Subagent A):**
 2. Update serve.rs gateway_handler — add dynamic pricing adjustment in session auth branch after proxy response
-3. Update sessions.rs — add deduct_additional() helper
-4. Update mpp.rs — add dynamic pricing note to 402 response when dynamic pricing is enabled
+12. Wire GET /paygate/sessions route in serve.rs
 5. Run `cargo check` — fix all errors
 6. **Codex quality + security review (iteration 1 — gateway):** Run:
    ```bash
    codex exec "Review the changes on this branch. Run git diff main to see the diff. Focus on: 1) Dynamic pricing arithmetic — floating point precision, overflow on large token counts, rounding behavior, 2) Can a malicious upstream spoof X-Token-Count to drain session balance?, 3) Race condition between initial deduction and dynamic adjustment, 4) Config validation — what if base_cost + spread = 0? Negative values?, 5) 402 response for dynamic endpoints — does it leak pricing internals? For each finding: severity (critical/high/medium/low), file:line, and recommended fix. Be adversarial." -s read-only -c 'model_reasoning_effort="xhigh"' 2>&1 | tee /tmp/codex-dynamic-review-1.txt
    ```
    Fix any critical or high severity findings before proceeding.
-7. Write 5 tests for dynamic pricing logic
-8. Run `cargo test` — all tests must pass
+**Phase 3 — Tests (parallel subagents):**
+Launch 2 subagents simultaneously:
+- **Subagent D**: Gateway tests 1-3 (dynamic pricing adjusts cost downward, adjusts cost upward, no X-Token-Count header falls back to static)
+- **Subagent E**: Tests 4-5 (dynamic pricing disabled = no adjustment, compute_cost() unit test) + demo server header tests (summarize includes X-Token-Count, search includes X-Token-Count)
 
-Part B (Demo Server Headers):
-8. Update demo/src/routes/summarize.ts — add X-Token-Count response header
-9. Update demo/src/routes/search.ts — add X-Token-Count response header
-10. Update demo/paygate.toml — add [pricing.dynamic] config section
-
-Part C (Session Balance Widget):
-11. Add GET /paygate/sessions route — handle_get_sessions handler + list_sessions_for_payer DB query
-12. Wire GET route in serve.rs (note: POST /paygate/sessions already exists for session creation, GET is for querying)
-13. Update docs/marketplace.html — add session balance widget HTML/CSS/JS with 5-second polling
-14. Test the widget manually if possible
-
+After both complete, merge test code and run:
 15. Run full test suite: `cargo test` and verify demo server builds
 16. **Codex quality + security review (iteration 2 — full diff):** Run:
     ```bash
