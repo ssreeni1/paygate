@@ -34,6 +34,8 @@ pub struct Config {
     pub webhooks: WebhookConfig,
     #[serde(default)]
     pub storage: StorageConfig,
+    #[serde(default)]
+    pub governance: GovernanceConfig,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -240,6 +242,40 @@ impl Default for StorageConfig {
     }
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct GovernanceConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_daily_limit")]
+    pub default_daily_limit: String,
+    #[serde(default = "default_monthly_limit")]
+    pub default_monthly_limit: String,
+}
+
+impl Default for GovernanceConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            default_daily_limit: "10.00".to_string(),
+            default_monthly_limit: "100.00".to_string(),
+        }
+    }
+}
+
+fn default_daily_limit() -> String { "10.00".to_string() }
+fn default_monthly_limit() -> String { "100.00".to_string() }
+
+impl GovernanceConfig {
+    pub fn daily_limit_base_units(&self) -> u64 {
+        if !self.enabled { return u64::MAX; }
+        parse_price_to_base_units(&self.default_daily_limit).unwrap_or(u64::MAX)
+    }
+    pub fn monthly_limit_base_units(&self) -> u64 {
+        if !self.enabled { return u64::MAX; }
+        parse_price_to_base_units(&self.default_monthly_limit).unwrap_or(u64::MAX)
+    }
+}
+
 // Default value functions
 fn default_listen() -> String { "0.0.0.0:8080".to_string() }
 fn default_admin_listen() -> String { "127.0.0.1:8081".to_string() }
@@ -314,6 +350,11 @@ impl Config {
         validate_price(&self.pricing.default_price, "pricing.default_price")?;
         for (endpoint, price) in &self.pricing.endpoints {
             validate_price(price, &format!("pricing.endpoints.{endpoint}"))?;
+        }
+
+        if self.governance.enabled {
+            validate_price(&self.governance.default_daily_limit, "governance.default_daily_limit")?;
+            validate_price(&self.governance.default_monthly_limit, "governance.default_monthly_limit")?;
         }
 
         Ok(())
@@ -475,6 +516,46 @@ address = "not-an-address"
         assert_eq!(parse_price_to_base_units("0.005").unwrap(), 5000);
         assert_eq!(parse_price_to_base_units("1.000").unwrap(), 1_000_000);
         assert_eq!(parse_price_to_base_units("0.000").unwrap(), 0);
+    }
+
+    #[test]
+    fn test_governance_defaults() {
+        let toml = r#"
+[gateway]
+upstream = "http://localhost:3000"
+[tempo]
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
+[provider]
+address = "0x7F3a000000000000000000000000000000000001"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(!config.governance.enabled);
+        assert_eq!(config.governance.default_daily_limit, "10.00");
+        assert_eq!(config.governance.default_monthly_limit, "100.00");
+        // When disabled, limits return u64::MAX
+        assert_eq!(config.governance.daily_limit_base_units(), u64::MAX);
+        assert_eq!(config.governance.monthly_limit_base_units(), u64::MAX);
+    }
+
+    #[test]
+    fn test_governance_enabled_limits() {
+        let toml = r#"
+[gateway]
+upstream = "http://localhost:3000"
+[tempo]
+rpc_urls = ["https://rpc.presto.tempo.xyz"]
+[provider]
+address = "0x7F3a000000000000000000000000000000000001"
+[governance]
+enabled = true
+default_daily_limit = "5.00"
+default_monthly_limit = "50.00"
+"#;
+        let config: Config = toml::from_str(toml).unwrap();
+        config.validate().unwrap();
+        assert!(config.governance.enabled);
+        assert_eq!(config.governance.daily_limit_base_units(), 5_000_000);
+        assert_eq!(config.governance.monthly_limit_base_units(), 50_000_000);
     }
 
     #[test]

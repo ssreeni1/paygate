@@ -1,6 +1,7 @@
 use crate::config::Config;
 use crate::db::{DbReader, DbWriter};
 use crate::rate_limit::RateLimiter;
+use crate::sessions::SpendAccumulator;
 use crate::webhook::WebhookSender;
 use arc_swap::ArcSwap;
 use metrics_exporter_prometheus::PrometheusHandle;
@@ -17,6 +18,7 @@ pub struct AppState {
     pub webhook_sender: Option<WebhookSender>,
     pub prometheus_handle: PrometheusHandle,
     pub started_at: std::time::Instant,
+    pub spend_accumulator: Arc<SpendAccumulator>,
 }
 
 impl AppState {

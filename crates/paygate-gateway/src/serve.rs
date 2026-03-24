@@ -96,6 +96,8 @@ pub(crate) async fn cmd_serve(config_path: &str) {
 
     let retention = config.storage.request_log_retention_days;
 
+    let spend_accumulator = Arc::new(crate::sessions::SpendAccumulator::new());
+
     // Create AppState with all fields from both branches
     let state = AppState {
         config: Arc::new(arc_swap::ArcSwap::from_pointee(config.clone())),
@@ -106,6 +108,7 @@ pub(crate) async fn cmd_serve(config_path: &str) {
         webhook_sender,
         prometheus_handle,
         started_at: std::time::Instant::now(),
+        spend_accumulator,
     };
 
     // Build admin router
@@ -121,6 +124,7 @@ pub(crate) async fn cmd_serve(config_path: &str) {
         .route("/paygate/sessions/nonce", axum::routing::post(sessions::handle_nonce))
         .route("/paygate/sessions", axum::routing::post(sessions::handle_create_session)
             .get(sessions::handle_get_sessions))
+        .route("/paygate/spend", axum::routing::get(sessions::handle_get_spend))
         .merge(admin::receipt_route())
         .merge(admin::transactions_route())
         .fallback(gateway_handler)
@@ -333,8 +337,13 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
 
     // Session auth: HMAC-based
     if parts.headers.contains_key("x-payment-session") {
+        let agent_name = parts.headers
+            .get(paygate_common::mpp::HEADER_PAYMENT_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_string();
         let request_hash = paygate_common::hash::request_hash(&method, &path, &body_bytes);
-        match sessions::verify_and_deduct(&state, &parts.headers, &request_hash, &endpoint).await {
+        match sessions::verify_and_deduct(&state, &parts.headers, &request_hash, &endpoint, &agent_name).await {
             Ok(deduction) => {
                 let req = Request::from_parts(parts, Body::from(body_bytes));
                 return match crate::proxy::forward_request(&state, req, "", deduction.amount_deducted, &endpoint).await {
@@ -381,6 +390,7 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
                             final_cost,
                             Some(resp.status().as_u16() as i32),
                             None,
+                            agent_name.clone(),
                         ).await;
                         resp
                     }
@@ -397,6 +407,15 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
                         Json(json!({"error": format!("upstream error: {e}")})),
                     ).into_response(),
                 };
+            }
+            Err(sessions::SessionError::SpendLimitExceeded { period, limit, spent }) => {
+                return (StatusCode::PAYMENT_REQUIRED, Json(json!({
+                    "error": "spend_limit_exceeded",
+                    "message": format!("{} spend limit exceeded", period),
+                    "period": period,
+                    "limit": limit,
+                    "spent": spent,
+                }))).into_response();
             }
             Err(sessions::SessionError::InsufficientBalance { balance, rate }) => {
                 return (StatusCode::PAYMENT_REQUIRED, Json(json!({
@@ -494,6 +513,7 @@ pub(crate) async fn gateway_handler(State(state): State<AppState>, req: Request<
                             proof.amount,
                             Some(status_code),
                             None,
+                            String::new(),
                         )
                         .await;
                     resp
@@ -706,6 +726,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let state = AppState {
@@ -717,6 +738,7 @@ mod tests {
             webhook_sender: None,
             prometheus_handle,
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         };
 
         let app = Router::new()
@@ -793,6 +815,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let webhook_sender = webhook_url.map(|url| {
@@ -810,6 +833,7 @@ mod tests {
                 .build_recorder()
                 .handle(),
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         }
     }
 
@@ -1304,6 +1328,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let state = AppState {
@@ -1315,6 +1340,7 @@ mod tests {
             webhook_sender: None,
             prometheus_handle,
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         };
 
         let app = admin::transactions_route().with_state(state);
@@ -1390,6 +1416,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let state = AppState {
@@ -1401,6 +1428,7 @@ mod tests {
             webhook_sender: None,
             prometheus_handle,
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         };
 
         let app = admin::transactions_route().with_state(state);
@@ -1468,6 +1496,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let state = AppState {
@@ -1479,6 +1508,7 @@ mod tests {
             webhook_sender: None,
             prometheus_handle,
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         };
 
         let app = admin::transactions_route().with_state(state);

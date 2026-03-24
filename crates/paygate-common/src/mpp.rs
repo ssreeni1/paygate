@@ -10,6 +10,7 @@ pub const HEADER_PAYMENT_QUOTE_ID: &str = "X-Payment-Quote-Id";
 pub const HEADER_PAYMENT_SESSION: &str = "X-Payment-Session";
 pub const HEADER_PAYMENT_SESSION_SIG: &str = "X-Payment-Session-Sig";
 pub const HEADER_PAYMENT_TIMESTAMP: &str = "X-Payment-Timestamp";
+pub const HEADER_PAYMENT_AGENT: &str = "X-Payment-Agent";
 
 // Response headers (sent by gateway in 402)
 pub const HEADER_PAYMENT_REQUIRED: &str = "X-Payment-Required";

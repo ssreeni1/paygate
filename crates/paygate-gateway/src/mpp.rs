@@ -167,6 +167,7 @@ mod tests {
             security: Default::default(),
             webhooks: Default::default(),
             storage: Default::default(),
+            governance: Default::default(),
         };
 
         let state = AppState {
@@ -180,6 +181,7 @@ mod tests {
                 .build_recorder()
                 .handle(),
             started_at: std::time::Instant::now(),
+            spend_accumulator: Arc::new(crate::sessions::SpendAccumulator::new()),
         };
 
         let resp = payment_required_response(&state, "POST /v1/test").await;
