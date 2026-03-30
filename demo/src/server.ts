@@ -37,6 +37,34 @@ app.post('/rpc', async (req, res) => {
   }
 });
 
+// npm registry proxy — same connectivity issue as RPC. The Rust gateway uses
+// NPM_REGISTRY_PROXY=http://localhost:3001/npm to reach registry.npmjs.org.
+app.get('/npm/:package', async (req, res) => {
+  const pkg = req.params.package;
+  try {
+    const resp = await fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg)}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    const data = await resp.text();
+    res.status(resp.status).set('Content-Type', resp.headers.get('content-type') || 'application/json').send(data);
+  } catch (err: any) {
+    res.status(502).json({ error: `npm proxy error: ${err.message}` });
+  }
+});
+// Scoped packages: /npm/@scope/package
+app.get('/npm/@:scope/:package', async (req, res) => {
+  const pkg = `@${req.params.scope}/${req.params.package}`;
+  try {
+    const resp = await fetch(`https://registry.npmjs.org/${encodeURIComponent(pkg)}`, {
+      headers: { 'Accept': 'application/json' },
+    });
+    const data = await resp.text();
+    res.status(resp.status).set('Content-Type', resp.headers.get('content-type') || 'application/json').send(data);
+  } catch (err: any) {
+    res.status(502).json({ error: `npm proxy error: ${err.message}` });
+  }
+});
+
 // Error handler (must be last)
 app.use(errorHandler);
 

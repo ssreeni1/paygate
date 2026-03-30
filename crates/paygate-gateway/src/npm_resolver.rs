@@ -142,7 +142,12 @@ pub async fn resolve_package(
     }
 
     // Fetch from npm registry (full metadata — abbreviated doesn't include repository)
-    let url = format!("https://registry.npmjs.org/{package_name}");
+    // In production (Railway), use NPM_REGISTRY_PROXY to route through the Node.js proxy
+    // which can reach registry.npmjs.org (same connectivity fix as the RPC proxy).
+    let url = match std::env::var("NPM_REGISTRY_PROXY") {
+        Ok(proxy) => format!("{}/{}", proxy.trim_end_matches('/'), package_name),
+        Err(_) => format!("https://registry.npmjs.org/{package_name}"),
+    };
     let resp = http_client
         .get(&url)
         .timeout(std::time::Duration::from_secs(10))
