@@ -2,107 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --color-canvas: #0A0A0B;
-  --color-surface: #141416;
-  --color-surface-hover: #1C1C1F;
-  --color-border: #27272A;
-  --color-border-subtle: #1E1E21;
-  --color-text-primary: #FAFAFA;
-  --color-text-muted: #A1A1AA;
-  --color-text-dim: #71717A;
-  --color-accent: #22D3EE;
-  --color-accent-dim: rgba(34, 211, 238, 0.15);
-  --color-accent-glow: rgba(34, 211, 238, 0.3);
-  --color-success: #4ADE80;
-  --color-warning: #FBBF24;
-  --color-error: #F87171;
-  --color-info: #38BDF8;
-
-  --font-display: "Satoshi", "DM Sans", sans-serif;
-  --font-body: "DM Sans", sans-serif;
-  --font-mono: "Geist Mono", monospace;
-
-  --space-2xs: 2px;
-  --space-xs: 4px;
-  --space-sm: 8px;
-  --space-md: 16px;
-  --space-lg: 24px;
-  --space-xl: 32px;
-  --space-2xl: 48px;
-  --space-3xl: 64px;
-
-  --radius-sm: 4px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-full: 9999px;
-}
-
 html {
-  background-color: var(--color-canvas);
-  color: var(--color-text-primary);
+  background-color: #0C0C0C;
+  color: #E0E0E0;
 }
 
 body {
-  font-family: var(--font-body);
+  font-family: 'Berkeley Mono', 'JetBrains Mono', 'Geist Mono', 'SF Mono', monospace;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
-/* Scan-line texture overlay for receipt cards */
-.receipt-texture {
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      transparent,
-      transparent 2px,
-      rgba(255, 255, 255, 0.01) 2px,
-      rgba(255, 255, 255, 0.01) 4px
-    );
+::selection {
+  background: rgba(180, 240, 160, 0.2);
+  color: #B4F0A0;
 }
 
-/* Cyan gradient top border for cards */
-.card-top-border {
+a {
+  color: #E0E0E0;
+  text-decoration: none;
+}
+a:hover {
+  color: #B4F0A0;
+}
+
+/* ASCII box drawing components */
+.ascii-box {
+  border: 1px solid #333;
   position: relative;
 }
 
-.card-top-border::before {
-  content: "";
+.ascii-box::before {
+  content: "┌" attr(data-title) "┐";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #22D3EE, #06B6D4, #22D3EE);
+  top: -1px;
+  left: -1px;
+  color: #555;
+  font-size: 11px;
 }
 
-/* Human avatar glow ring */
-.avatar-glow {
-  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15), 0 0 20px rgba(34, 211, 238, 0.3);
+.ascii-hr {
+  border: none;
+  color: #333;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 13px;
+  line-height: 1;
+  margin: 16px 0;
+}
+.ascii-hr::before {
+  content: "────────────────────────────────────────────────────────────────";
+  color: #333;
 }
 
-/* Agent avatar dashed border */
-.avatar-agent {
-  border: 2px dashed var(--color-border);
-}
+/* Status indicators */
+.status-paid { color: #B4F0A0; }
+.status-paid::before { content: "● "; }
+.status-escrowed { color: #F0D080; }
+.status-escrowed::before { content: "○ "; }
+.status-claimed { color: #B4F0A0; }
+.status-claimed::before { content: "✓ "; }
+.status-reclaimed { color: #555; }
+.status-reclaimed::before { content: "× "; }
 
-/* Status badge styles */
-.badge-paid {
-  color: var(--color-success);
-  background-color: rgba(74, 222, 128, 0.12);
-}
+/* Minimal scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #111; }
+::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 
-.badge-escrowed {
-  color: var(--color-warning);
-  background-color: rgba(251, 191, 36, 0.12);
+/* Receipt print effect */
+@keyframes print-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
-
-.badge-claimed {
-  color: var(--color-accent);
-  background-color: rgba(34, 211, 238, 0.12);
-}
-
-.badge-reclaimed {
-  color: var(--color-text-dim);
-  background-color: rgba(113, 113, 122, 0.12);
+.print-in {
+  animation: print-in 0.3s ease-out;
 }

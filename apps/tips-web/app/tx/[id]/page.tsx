@@ -4,7 +4,6 @@ import {
   getTip,
   getTipsByRecipient,
   formatUsdc,
-  truncateAddress,
   truncateHash,
   formatDate,
 } from "@/lib/api";
@@ -17,39 +16,20 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   try {
     const tip = await getTip(params.id);
     const amount = formatUsdc(tip.amount_usdc);
+    const pkg = tip.package_name || tip.recipient_gh;
     return {
-      title: `${amount} tip to @${tip.recipient_gh} for ${tip.package_name}`,
-      description: tip.reason,
+      title: `${amount} tip to @${tip.recipient_gh}`,
+      description: `${tip.sender_name || "an agent"} tipped @${tip.recipient_gh} for ${pkg}`,
       openGraph: {
         title: `${amount} tip to @${tip.recipient_gh}`,
-        description: `Agent ${tip.sender_name} tipped @${tip.recipient_gh} for ${tip.package_name}: "${tip.reason}"`,
+        description: `${tip.sender_name || "an agent"} tipped @${tip.recipient_gh} for ${pkg}: "${tip.reason}"`,
         type: "article",
       },
-      twitter: {
-        card: "summary_large_image",
-      },
+      twitter: { card: "summary_large_image" },
     };
   } catch {
-    return { title: "Tip Receipt — Agent Tips" };
+    return { title: "tip receipt" };
   }
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const cls =
-    status === "paid"
-      ? "badge-paid"
-      : status === "escrowed"
-        ? "badge-escrowed"
-        : status === "claimed"
-          ? "badge-claimed"
-          : "badge-reclaimed";
-  return (
-    <span
-      className={`${cls} font-mono text-label uppercase tracking-wider px-[10px] py-[4px] rounded-full animate-fade-in`}
-    >
-      {status}
-    </span>
-  );
 }
 
 export default async function ReceiptPage({ params }: Props) {
@@ -60,175 +40,134 @@ export default async function ReceiptPage({ params }: Props) {
     notFound();
   }
 
-  const amount = formatUsdc(tip.amount_usdc);
+  if (!tip) notFound();
 
-  // Fetch social proof: all tips to this recipient
+  const amount = formatUsdc(tip.amount_usdc);
+  const pkg = tip.package_name || null;
+
   let totalTipped = tip.amount_usdc;
   let agentCount = 1;
   try {
     const allTips = await getTipsByRecipient(tip.recipient_gh);
     totalTipped = allTips.reduce((sum, t) => sum + t.amount_usdc, 0);
-    const uniqueAgents = new Set(allTips.map((t) => t.sender_name));
-    agentCount = uniqueAgents.size;
-  } catch {
-    // Social proof is non-critical; use defaults
-  }
+    agentCount = new Set(allTips.map((t) => t.sender_name)).size;
+  } catch {}
+
+  const statusChar =
+    tip.status === "paid" ? "●" :
+    tip.status === "escrowed" ? "○" :
+    tip.status === "claimed" ? "✓" : "×";
+
+  const statusColor =
+    tip.status === "paid" || tip.status === "claimed" ? "text-accent" :
+    tip.status === "escrowed" ? "text-warning" : "text-text-dim";
 
   return (
     <div className="flex justify-center px-md py-2xl">
-      <div className="w-full max-w-receipt">
-        {/* Receipt card */}
-        <div className="bg-surface rounded-lg card-top-border receipt-texture overflow-hidden">
-          <div className="p-xl">
-            {/* Amount */}
-            <div className="text-center mb-xl">
-              <p className="text-label font-mono text-text-dim uppercase tracking-widest mb-sm">
-                Agent Tip
+      <div className="w-full max-w-receipt print-in">
+        <pre className="text-text-dim text-small leading-tight mb-sm select-none">
+{`┌──────────────────────────────────────────────┐`}
+        </pre>
+
+        <div className="border-x border-border-subtle px-lg py-xl">
+          <div className="text-center mb-xl">
+            <p className="text-label text-text-dim uppercase tracking-widest mb-md">
+              tip receipt
+            </p>
+            <p className="text-hero text-accent font-bold print-in">
+              {amount}
+            </p>
+            <p className="text-small text-text-dim mt-xs">USDC on Tempo</p>
+          </div>
+
+          {tip.reason && (
+            <div className="mb-xl px-md">
+              <p className="text-body-lg text-text-primary italic text-center">
+                &ldquo;{tip.reason}&rdquo;
               </p>
-              <p className="font-mono text-hero text-accent animate-count-up font-bold">
-                {amount}
+              {pkg && (
+                <p className="text-small text-text-dim text-center mt-xs">
+                  for {pkg}
+                </p>
+              )}
+            </div>
+          )}
+
+          <pre className="text-text-dim text-small text-center select-none my-lg">
+            {"── ── ── ── ── ── ── ── ── ── ──"}
+          </pre>
+
+          <div className="flex items-start justify-between mb-xl">
+            <div>
+              <p className="text-label text-text-dim uppercase mb-xs">from</p>
+              <p className="text-body text-text-muted">
+                {tip.sender_name || "agent"}
               </p>
-              <p className="text-label font-mono text-text-dim mt-xs">USDC</p>
             </div>
-
-            {/* Reason — italic pull quote */}
-            {tip.reason && (
-              <div className="border-l-2 border-accent pl-md py-xs mb-xl">
-                <p className="text-body-lg text-text-primary italic">
-                  &ldquo;{tip.reason}&rdquo;
-                </p>
-                <p className="text-small text-text-dim mt-xs">
-                  for{" "}
-                  <span className="font-mono text-text-muted">
-                    {tip.package_name}
-                  </span>
-                </p>
-              </div>
-            )}
-
-            {/* Parties: sender -> recipient */}
-            <div className="flex items-center justify-center gap-lg mb-xl">
-              {/* Sender (agent) */}
-              <div className="flex flex-col items-center gap-sm">
-                <div className="w-12 h-12 rounded-full avatar-agent bg-surface-hover flex items-center justify-center">
-                  <span className="font-mono text-label text-text-dim">AI</span>
-                </div>
-                <div className="text-center">
-                  <p className="text-small text-text-muted font-mono">
-                    {tip.sender_name}
-                  </p>
-                  <p className="text-label text-text-dim">
-                    {truncateAddress(tip.sender_wallet)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Arrow */}
-              <div className="text-text-dim text-body-lg font-mono">
-                &rarr;
-              </div>
-
-              {/* Recipient (human) */}
-              <div className="flex flex-col items-center gap-sm">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={`https://github.com/${tip.recipient_gh}.png?size=96`}
-                  alt={tip.recipient_gh}
-                  width={48}
-                  height={48}
-                  className="rounded-full avatar-glow"
-                />
-                <div className="text-center">
-                  <p className="text-small text-text-primary font-medium">
-                    @{tip.recipient_gh}
-                  </p>
-                  <p className="text-label text-text-dim">Developer</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Status badge */}
-            <div className="flex justify-center mb-lg">
-              <StatusBadge status={tip.status} />
-            </div>
-
-            {/* Escrowed CTA */}
-            {tip.status === "escrowed" && (
-              <div className="bg-canvas rounded-md p-md mb-lg text-center border border-border-subtle">
-                <p className="text-small text-warning">
-                  Unclaimed — claim at{" "}
-                  <a
-                    href="/claim"
-                    className="underline hover:text-accent transition-colors duration-150"
-                  >
-                    tips.paygate.fm/claim
-                  </a>
-                </p>
-              </div>
-            )}
-
-            {/* Divider */}
-            <div className="border-t border-border-subtle my-lg" />
-
-            {/* Meta rows */}
-            <div className="space-y-sm">
-              <MetaRow label="Transaction" value={truncateHash(tip.tx_hash)} mono />
-              <MetaRow label="Tip ID" value={tip.id} mono />
-              <MetaRow label="Timestamp" value={formatDate(tip.created_at)} />
-            </div>
-
-            {/* Divider */}
-            <div className="border-t border-border-subtle my-lg" />
-
-            {/* Social proof */}
-            <div className="text-center">
-              <p className="text-small text-text-dim">
-                This developer has been tipped{" "}
-                <span className="text-accent font-mono font-medium">
-                  {formatUsdc(totalTipped)}
-                </span>{" "}
-                by{" "}
-                <span className="text-text-muted font-medium">
-                  {agentCount} agent{agentCount !== 1 ? "s" : ""}
-                </span>
-              </p>
+            <div className="text-text-dim px-md pt-sm">{"->"}</div>
+            <div className="text-right">
+              <p className="text-label text-text-dim uppercase mb-xs">to</p>
+              <a
+                href={`/${tip.recipient_gh}`}
+                className="text-body text-text-primary hover:text-accent"
+              >
+                @{tip.recipient_gh}
+              </a>
             </div>
           </div>
 
-          {/* Footer branding */}
-          <div className="border-t border-border-subtle px-xl py-md flex justify-between items-center">
-            <p className="text-label text-text-dim font-mono">
-              <span className="text-accent">TIPS</span>.PAYGATE.FM
-            </p>
-            <p className="text-label text-text-dim">
-              Verified on-chain
+          <div className="flex justify-between items-center mb-lg">
+            <span className="text-label text-text-dim uppercase">status</span>
+            <span className={`text-small ${statusColor}`}>
+              {statusChar} {tip.status}
+            </span>
+          </div>
+
+          {tip.status === "escrowed" && (
+            <div className="border border-border-subtle p-md mb-lg text-center">
+              <p className="text-small text-warning">
+                unclaimed.{" "}
+                <a href="/claim" className="underline hover:text-accent">
+                  claim here
+                </a>
+              </p>
+            </div>
+          )}
+
+          <pre className="text-text-dim text-small text-center select-none my-lg">
+            {"── ── ── ── ── ── ── ── ── ── ──"}
+          </pre>
+
+          <div className="space-y-xs text-small">
+            {tip.tx_hash && (
+              <div className="flex justify-between">
+                <span className="text-text-dim">tx</span>
+                <span className="text-text-muted">{truncateHash(tip.tx_hash)}</span>
+              </div>
+            )}
+            <div className="flex justify-between">
+              <span className="text-text-dim">id</span>
+              <span className="text-text-muted">{tip.id}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-dim">time</span>
+              <span className="text-text-muted">{formatDate(tip.created_at)}</span>
+            </div>
+          </div>
+
+          <div className="mt-xl pt-lg border-t border-border-subtle text-center">
+            <p className="text-small text-text-dim">
+              @{tip.recipient_gh} has received{" "}
+              <span className="text-accent">{formatUsdc(totalTipped)}</span>
+              {" "}from {agentCount} agent{agentCount !== 1 ? "s" : ""}
             </p>
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-function MetaRow({
-  label,
-  value,
-  mono,
-}: {
-  label: string;
-  value: string;
-  mono?: boolean;
-}) {
-  return (
-    <div className="flex justify-between items-baseline">
-      <span className="text-label text-text-dim uppercase tracking-wider">
-        {label}
-      </span>
-      <span
-        className={`text-small text-text-muted ${mono ? "font-mono" : ""}`}
-      >
-        {value}
-      </span>
+        <pre className="text-text-dim text-small leading-tight mt-sm select-none">
+{`└──────────────────────────────────────────────┘`}
+        </pre>
+      </div>
     </div>
   );
 }

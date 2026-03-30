@@ -8,10 +8,10 @@ export interface TipRecord {
   sender_wallet: string;
   sender_name: string;
   recipient_gh: string;
-  package_name: string;
+  package_name: string | null;
   /** Amount in USDC base units (6 decimals). 500000 = $0.50 */
   amount_usdc: number;
-  reason: string;
+  reason: string | null;
   evidence: string | null;
   status: "paid" | "escrowed" | "claimed" | "reclaimed";
   tx_hash: string;
@@ -92,20 +92,25 @@ export function formatUsdc(baseUnits: number): string {
 }
 
 /** Truncate a hex address: 0x7F3a...Prov */
-export function truncateAddress(addr: string): string {
+export function truncateAddress(addr: string | null | undefined): string {
+  if (!addr) return "unknown";
   if (addr.length <= 12) return addr;
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 /** Truncate a tx hash for display. */
-export function truncateHash(hash: string): string {
+export function truncateHash(hash: string | null | undefined): string {
+  if (!hash) return "unknown";
   if (hash.length <= 16) return hash;
   return `${hash.slice(0, 10)}...${hash.slice(-6)}`;
 }
 
 /** Format ISO date to human-readable. */
-export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return "unknown";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("en-US", {
     year: "numeric",
     month: "short",
     day: "numeric",

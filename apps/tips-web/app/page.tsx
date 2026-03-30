@@ -1,104 +1,86 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Agent Tips — AI agents tipping open source developers",
-  description:
-    "AI agents autonomously tip open-source developers via stablecoin micropayments.",
+  title: "agent tips",
+  description: "AI agents tipping open source developers.",
 };
 
 export default function HomePage() {
   return (
     <div className="flex justify-center px-md py-3xl">
-      <div className="w-full max-w-content text-center">
-        {/* Hero */}
+      <div className="w-full max-w-content">
         <div className="mb-2xl">
-          <p className="text-label font-mono text-accent uppercase tracking-widest mb-md">
-            Agent Tips
+          <pre className="text-text-dim text-small mb-lg select-none">
+{`
+   ┌─────────────────────────────────┐
+   │         agent  tips             │
+   └─────────────────────────────────┘
+`}
+          </pre>
+
+          <p className="text-title text-text-primary mb-lg">
+            AI agents tip open source developers.
           </p>
-          <h1 className="font-display text-display font-bold leading-tight mb-lg">
-            AI agents tip
-            <br />
-            open source developers
-          </h1>
-          <p className="text-body-lg text-text-muted max-w-md mx-auto">
-            When an AI agent uses an open source package, it can autonomously
-            send a USDC microtip to the developer. Every tip is verified
-            on-chain.
+
+          <p className="text-body text-text-muted leading-relaxed mb-xl">
+            When an AI agent uses an open source package, it sends
+            a USDC microtip to the developer. Every tip is verified
+            on-chain. No signup required.
           </p>
         </div>
 
-        {/* CTA */}
-        <div className="flex flex-col items-center gap-md mb-3xl">
+        <pre className="text-text-dim text-small select-none mb-xl ascii-hr">
+          {"────────────────────────────────────────────"}
+        </pre>
+
+        <div className="mb-2xl">
+          <p className="text-label text-text-dim uppercase tracking-widest mb-lg">
+            how it works
+          </p>
+          <div className="space-y-md text-body text-text-muted">
+            <p>
+              <span className="text-text-dim mr-sm">01</span>
+              {"  "}agent uses an open source package
+            </p>
+            <p>
+              <span className="text-text-dim mr-sm">02</span>
+              {"  "}agent sends a USDC tip to the maintainer
+            </p>
+            <p>
+              <span className="text-text-dim mr-sm">03</span>
+              {"  "}developer claims with their GitHub identity
+            </p>
+          </div>
+        </div>
+
+        <pre className="text-text-dim text-small select-none mb-xl ascii-hr">
+          {"────────────────────────────────────────────"}
+        </pre>
+
+        <div className="flex gap-lg mb-2xl">
           <a
             href="/leaderboard"
-            className="inline-block bg-accent text-canvas font-display font-bold text-body-lg px-xl py-sm rounded-md hover:opacity-90 transition-opacity duration-150"
+            className="text-body text-text-muted border border-border-subtle px-lg py-sm hover:text-accent hover:border-accent transition-colors"
           >
-            View Leaderboard
+            leaderboard
           </a>
           <a
             href="/claim"
-            className="text-small text-text-muted hover:text-accent transition-colors duration-150"
+            className="text-body text-text-muted border border-border-subtle px-lg py-sm hover:text-accent hover:border-accent transition-colors"
           >
-            Have unclaimed tips? Claim now
+            claim tips
           </a>
         </div>
 
-        {/* How it works */}
-        <div className="border-t border-border-subtle pt-2xl">
-          <p className="text-label font-mono text-text-dim uppercase tracking-widest mb-xl">
-            How it works
+        <div className="mt-2xl">
+          <p className="text-label text-text-dim uppercase tracking-widest mb-sm">
+            add to your readme
           </p>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-lg text-left">
-            <Step
-              num="01"
-              title="Agent uses a package"
-              desc="An AI agent imports an open source library to complete a task."
-            />
-            <Step
-              num="02"
-              title="Agent sends a tip"
-              desc="The agent autonomously sends a USDC microtip via PayGate to the package maintainer."
-            />
-            <Step
-              num="03"
-              title="Developer claims"
-              desc="The developer verifies their GitHub identity and claims USDC to their wallet."
-            />
-          </div>
-        </div>
-
-        {/* Badge embed */}
-        <div className="border-t border-border-subtle mt-2xl pt-2xl">
-          <p className="text-label font-mono text-text-dim uppercase tracking-widest mb-md">
-            Add to your README
-          </p>
-          <div className="bg-surface rounded-md border border-border-subtle p-md">
-            <code className="text-small font-mono text-text-muted break-all">
-              {'![Agent Tips](https://tips.paygate.fm/badge/YOUR_USERNAME)'}
-            </code>
-          </div>
+          <pre className="text-small text-text-muted bg-surface border border-border-subtle p-md overflow-x-auto">
+{`![agent tips](https://tips.paygate.fm/badge/YOUR_USERNAME)`}
+          </pre>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Step({
-  num,
-  title,
-  desc,
-}: {
-  num: string;
-  title: string;
-  desc: string;
-}) {
-  return (
-    <div className="bg-surface rounded-md border border-border-subtle p-lg">
-      <p className="font-mono text-label text-accent mb-sm">{num}</p>
-      <p className="font-display text-body-lg font-bold text-text-primary mb-xs">
-        {title}
-      </p>
-      <p className="text-small text-text-muted">{desc}</p>
     </div>
   );
 }

@@ -11,26 +11,22 @@ export default async function OGImage({ params }: { params: { id: string } }) {
   try {
     tip = await getTip(params.id);
   } catch {
-    // Fallback OG card if tip not found
     return new ImageResponse(
       (
         <div
           style={{
-            display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
-            justifyContent: "center",
             width: "100%",
             height: "100%",
-            backgroundColor: "#141416",
-            color: "#FAFAFA",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#0C0C0C",
+            color: "#555",
             fontFamily: "monospace",
+            fontSize: 24,
           }}
         >
-          <div style={{ fontSize: 40, color: "#22D3EE" }}>TIPS.PAYGATE.FM</div>
-          <div style={{ fontSize: 24, color: "#A1A1AA", marginTop: 16 }}>
-            Tip not found
-          </div>
+          tip not found
         </div>
       ),
       { ...size }
@@ -38,160 +34,130 @@ export default async function OGImage({ params }: { params: { id: string } }) {
   }
 
   const amount = formatUsdc(tip.amount_usdc);
-  const statusColor =
-    tip.status === "paid"
-      ? "#4ADE80"
-      : tip.status === "escrowed"
-        ? "#FBBF24"
-        : tip.status === "claimed"
-          ? "#22D3EE"
-          : "#71717A";
+  const pkg = tip.package_name || tip.recipient_gh;
+  const sender = tip.sender_name || "agent";
+  const statusChar =
+    tip.status === "paid" ? "●" :
+    tip.status === "escrowed" ? "○" :
+    tip.status === "claimed" ? "✓" : "×";
 
   return new ImageResponse(
     (
       <div
         style={{
-          display: "flex",
-          flexDirection: "column",
           width: "100%",
           height: "100%",
-          backgroundColor: "#141416",
-          padding: 0,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: "60px 80px",
+          backgroundColor: "#0C0C0C",
+          fontFamily: "monospace",
           position: "relative",
         }}
       >
-        {/* Top cyan gradient line */}
+        {/* Top border line */}
         <div
           style={{
-            width: "100%",
-            height: 3,
-            background: "linear-gradient(90deg, #22D3EE, #06B6D4, #22D3EE)",
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            backgroundColor: "#333",
           }}
         />
 
-        {/* Content */}
+        {/* Amount */}
+        <div
+          style={{
+            fontSize: 72,
+            fontWeight: 700,
+            color: "#B4F0A0",
+            marginBottom: 12,
+            display: "flex",
+          }}
+        >
+          {amount}
+        </div>
+
+        {/* Action line */}
+        <div
+          style={{
+            fontSize: 28,
+            color: "#888",
+            marginBottom: 24,
+            display: "flex",
+          }}
+        >
+          <span style={{ color: "#E0E0E0" }}>{sender}</span>
+          <span style={{ margin: "0 12px" }}>{"->"}</span>
+          <span style={{ color: "#E0E0E0" }}>@{tip.recipient_gh}</span>
+          {tip.package_name && (
+            <span style={{ color: "#555", marginLeft: 12 }}>
+              for {tip.package_name}
+            </span>
+          )}
+        </div>
+
+        {/* Reason */}
+        {tip.reason && (
+          <div
+            style={{
+              fontSize: 20,
+              color: "#555",
+              fontStyle: "italic",
+              marginBottom: 40,
+              display: "flex",
+            }}
+          >
+            &ldquo;{tip.reason}&rdquo;
+          </div>
+        )}
+
+        {/* Footer */}
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            padding: "48px 64px",
-            flex: 1,
             justifyContent: "space-between",
+            alignItems: "center",
+            position: "absolute",
+            bottom: 40,
+            left: 80,
+            right: 80,
           }}
         >
-          {/* Top section: amount + headline */}
-          <div style={{ display: "flex", flexDirection: "column" }}>
-            {/* Amount */}
-            <div
-              style={{
-                fontSize: 96,
-                fontWeight: 700,
-                color: "#22D3EE",
-                fontFamily: "monospace",
-                lineHeight: 1,
-                marginBottom: 8,
-              }}
-            >
-              {amount}
-            </div>
-            <div
-              style={{
-                fontSize: 18,
-                color: "#71717A",
-                fontFamily: "monospace",
-                letterSpacing: 2,
-                textTransform: "uppercase" as const,
-                marginBottom: 32,
-              }}
-            >
-              USDC
-            </div>
-
-            {/* Headline */}
-            <div
-              style={{
-                fontSize: 32,
-                color: "#FAFAFA",
-                fontWeight: 500,
-                lineHeight: 1.3,
-              }}
-            >
-              Agent tipped{" "}
-              <span style={{ color: "#22D3EE" }}>@{tip.recipient_gh}</span> for{" "}
-              {tip.package_name}
-            </div>
-
-            {/* Reason */}
-            {tip.reason && (
-              <div
-                style={{
-                  fontSize: 22,
-                  color: "#A1A1AA",
-                  fontStyle: "italic",
-                  marginTop: 16,
-                  borderLeft: "3px solid #22D3EE",
-                  paddingLeft: 20,
-                }}
-              >
-                &ldquo;{tip.reason}&rdquo;
-              </div>
-            )}
-          </div>
-
-          {/* Bottom row: status badge + branding */}
           <div
             style={{
+              fontSize: 18,
+              color: tip.status === "paid" || tip.status === "claimed" ? "#B4F0A0" : "#F0D080",
               display: "flex",
-              justifyContent: "space-between",
-              alignItems: "flex-end",
             }}
           >
-            {/* Status badge */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              <div
-                style={{
-                  width: 10,
-                  height: 10,
-                  borderRadius: "50%",
-                  backgroundColor: statusColor,
-                }}
-              />
-              <span
-                style={{
-                  fontSize: 18,
-                  color: statusColor,
-                  fontFamily: "monospace",
-                  textTransform: "uppercase" as const,
-                  letterSpacing: 2,
-                }}
-              >
-                {tip.status}
-              </span>
-            </div>
-
-            {/* Branding */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "baseline",
-                fontFamily: "monospace",
-              }}
-            >
-              <span style={{ fontSize: 22, color: "#22D3EE", fontWeight: 700 }}>
-                TIPS
-              </span>
-              <span style={{ fontSize: 22, color: "#71717A" }}>
-                .PAYGATE.FM
-              </span>
-            </div>
+            {statusChar} {tip.status}
+          </div>
+          <div
+            style={{
+              fontSize: 16,
+              color: "#333",
+              display: "flex",
+            }}
+          >
+            agent-tips
           </div>
         </div>
+
+        {/* Bottom border line */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 2,
+            backgroundColor: "#333",
+          }}
+        />
       </div>
     ),
     { ...size }
