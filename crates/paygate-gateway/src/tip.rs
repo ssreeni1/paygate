@@ -308,6 +308,25 @@ fn lookup_wallet(db_reader: &DbReader, github_username: &str) -> Option<String> 
     .ok()
 }
 
+// ─── GitHub org membership check ────────────────────────────────────────────
+
+/// Check if a GitHub user is a public member of an org.
+/// Uses unauthenticated GitHub API: GET /orgs/{org}/public_members/{user}
+/// Returns 204 if member, 404 if not. No auth token needed.
+async fn is_org_member(http_client: &reqwest::Client, org: &str, username: &str) -> bool {
+    let url = format!("https://api.github.com/orgs/{org}/public_members/{username}");
+    match http_client
+        .get(&url)
+        .header("User-Agent", "agent-tips/0.6")
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .await
+    {
+        Ok(resp) => resp.status().as_u16() == 204,
+        Err(_) => false,
+    }
+}
+
 // ─── GitHub issue notification (fire-and-forget) ────────────────────────────
 
 async fn notify_github_issue(
@@ -481,39 +500,86 @@ pub async fn handle_claim(
     if let Err((status, msg)) = verify_internal_auth(&headers) {
         return (status, Json(serde_json::json!({ "error": msg }))).into_response();
     }
-    // Verify the GitHub username matches, then update tip status
+    let gh_lower = req.github_username.to_lowercase();
+
+    // Phase 1: gather claim targets (sync DB reads, then async org checks)
+    // Read candidate orgs from DB first, then drop the connection before async calls
+    let candidate_orgs: Vec<String> = {
+        let conn = match state.db_reader.conn_raw() {
+            Ok(c) => c,
+            Err(_) => return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Database unavailable" }))).into_response(),
+        };
+
+        // Check direct match first
+        let direct_count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM tips WHERE recipient_gh = ? AND status = 'escrowed'",
+            params![gh_lower],
+            |row| row.get(0),
+        ).unwrap_or(0);
+
+        if direct_count > 0 {
+            vec![] // Direct match found, no need to check orgs
+        } else {
+            // Get all distinct escrowed recipients to check for org membership
+            let mut stmt = conn.prepare(
+                "SELECT DISTINCT recipient_gh FROM tips WHERE status = 'escrowed'"
+            ).unwrap();
+            stmt.query_map([], |row| row.get(0))
+                .unwrap()
+                .filter_map(|r| r.ok())
+                .collect()
+        }
+        // conn dropped here, safe to await below
+    };
+
+    // Phase 2: async org membership checks (no DB connection held)
+    let mut claim_targets: Vec<String> = vec![gh_lower.clone()];
+    for org in &candidate_orgs {
+        if is_org_member(&state.http_client, org, &gh_lower).await {
+            claim_targets.push(org.clone());
+            info!(user = %gh_lower, org = %org, "org member can claim org tips");
+        }
+    }
+
+    // Phase 3: execute claims (reopen DB connection)
     let conn = match state.db_reader.conn_raw() {
         Ok(c) => c,
         Err(_) => return (StatusCode::SERVICE_UNAVAILABLE, Json(serde_json::json!({ "error": "Database unavailable" }))).into_response(),
     };
 
-    let gh_lower = req.github_username.to_lowercase();
-
-    // Count escrowed tips for this user
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM tips WHERE recipient_gh = ? AND status = 'escrowed'",
-        params![gh_lower],
-        |row| row.get(0),
-    ).unwrap_or(0);
+    // Count total claimable tips
+    let mut count: i64 = 0;
+    for target in &claim_targets {
+        count += conn.query_row(
+            "SELECT COUNT(*) FROM tips WHERE recipient_gh = ? AND status = 'escrowed'",
+            params![target],
+            |row| row.get::<_, i64>(0),
+        ).unwrap_or(0);
+    }
 
     if count == 0 {
         return (StatusCode::NOT_FOUND, Json(serde_json::json!({ "error": "No unclaimed tips" }))).into_response();
     }
 
-    // Register wallet in tip_registry
-    let _ = conn.execute(
-        "INSERT OR REPLACE INTO tip_registry (github_username, wallet_address, registered_at)
-         VALUES (?, ?, datetime('now'))",
-        params![gh_lower, req.wallet_address],
-    );
+    // Register wallet for all claim targets
+    for target in &claim_targets {
+        let _ = conn.execute(
+            "INSERT OR REPLACE INTO tip_registry (github_username, wallet_address, registered_at)
+             VALUES (?, ?, datetime('now'))",
+            params![target, req.wallet_address],
+        );
+    }
 
     // Mark all escrowed tips as claimed
     let now = chrono::Utc::now().to_rfc3339();
-    let updated = conn.execute(
-        "UPDATE tips SET status = 'claimed', claim_wallet = ?, claimed_at = ?
-         WHERE recipient_gh = ? AND status = 'escrowed'",
-        params![req.wallet_address, now, gh_lower],
-    ).unwrap_or(0);
+    let mut updated: usize = 0;
+    for target in &claim_targets {
+        updated += conn.execute(
+            "UPDATE tips SET status = 'claimed', claim_wallet = ?, claimed_at = ?
+             WHERE recipient_gh = ? AND status = 'escrowed'",
+            params![req.wallet_address, now, target],
+        ).unwrap_or(0);
+    }
 
     // TODO: Initiate on-chain transfer of escrowed funds to claim_wallet
     // This should be a background task that processes each claimed tip
