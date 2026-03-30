@@ -419,9 +419,14 @@ async fn create_tip_record(
 pub async fn handle_tip(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<TipRequest>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    // Validate amount upfront (before 402)
+    // Parse body manually so we keep the raw bytes for request hash
+    let req: TipRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Invalid request: {e}") }))).into_response(),
+    };
+
     if req.amount_usd < MIN_TIP_AMOUNT_USD {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Minimum tip is ${MIN_TIP_AMOUNT_USD}") }))).into_response();
     }
@@ -434,13 +439,10 @@ pub async fn handle_tip(
         .map(|t| t.receipt_base_url.clone())
         .unwrap_or_else(|| "https://tips.paygate.fm".to_string());
 
-    // Check for payment headers (MPP 402 flow)
     let payment = mpp::extract_payment_headers(&headers);
 
     match payment {
         None => {
-            // No payment — return 402 with tip amount as price
-            // Override the endpoint price with the tip amount
             let endpoint = format!("POST /paygate/tip:{}", req.target);
             mpp::payment_required_response_with_price(
                 &state,
@@ -449,10 +451,9 @@ pub async fn handle_tip(
             ).await
         }
         Some(payment_headers) => {
-            // Payment provided — verify on-chain
             let endpoint = format!("POST /paygate/tip:{}", req.target);
-            let body_bytes = serde_json::to_vec(&req).unwrap_or_default();
-            let request_hash = paygate_common::hash::request_hash("POST", &format!("/paygate/tip"), &body_bytes);
+            // Use raw body bytes for request hash (must match what client sent)
+            let request_hash = paygate_common::hash::request_hash("POST", "/paygate/tip", &body);
 
             let result = verifier::verify_payment(
                 &state,
@@ -507,8 +508,13 @@ pub async fn handle_tip(
 pub async fn handle_tip_batch(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Json(req): Json<TipBatchRequest>,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
+    let req: TipBatchRequest = match serde_json::from_slice(&body) {
+        Ok(r) => r,
+        Err(e) => return (StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Invalid request: {e}") }))).into_response(),
+    };
+
     if req.tips.is_empty() {
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": "Empty batch" }))).into_response();
     }
@@ -516,7 +522,6 @@ pub async fn handle_tip_batch(
         return (StatusCode::BAD_REQUEST, Json(json!({ "error": format!("Batch too large (max {MAX_BATCH_SIZE})") }))).into_response();
     }
 
-    // Validate all amounts upfront
     for tip in &req.tips {
         if tip.amount_usd < MIN_TIP_AMOUNT_USD || tip.amount_usd > MAX_TIP_AMOUNT_USD {
             return (StatusCode::BAD_REQUEST, Json(json!({
@@ -525,7 +530,7 @@ pub async fn handle_tip_batch(
         }
     }
 
-    // Phase 1: Resolve all targets and dedup BEFORE payment (FIX: dedup before insert)
+    // Phase 1: Resolve all targets and dedup BEFORE payment
     let mut resolved_tips: Vec<(TipRequest, ResolvedTarget)> = Vec::new();
     let mut seen_owners: std::collections::HashSet<String> = std::collections::HashSet::new();
     let mut skipped: Vec<TipBatchResult> = Vec::new();
@@ -572,9 +577,8 @@ pub async fn handle_tip_batch(
             mpp::payment_required_response_with_price(&state, endpoint, total_base_units).await
         }
         Some(payment_headers) => {
-            // Verify payment for total amount
-            let body_bytes = serde_json::to_vec(&req).unwrap_or_default();
-            let request_hash = paygate_common::hash::request_hash("POST", "/paygate/tip/batch", &body_bytes);
+            // Use raw body bytes for request hash
+            let request_hash = paygate_common::hash::request_hash("POST", "/paygate/tip/batch", &body);
 
             let result = verifier::verify_payment(
                 &state,
