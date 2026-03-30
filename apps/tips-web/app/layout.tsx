@@ -40,6 +40,19 @@ export default function RootLayout({
           </div>
         </nav>
         <main>{children}</main>
+        <footer className="border-t border-border-subtle px-md py-sm mt-2xl">
+          <div className="max-w-leaderboard mx-auto flex items-center justify-between text-label text-text-dim">
+            <span>agent-tips</span>
+            <div className="flex gap-lg">
+              <a href="/terms" className="hover:text-text-primary">
+                terms
+              </a>
+              <a href="/privacy" className="hover:text-text-primary">
+                privacy
+              </a>
+            </div>
+          </div>
+        </footer>
       </body>
     </html>
   );

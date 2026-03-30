@@ -111,7 +111,7 @@ export default async function OGImage({ params }: { params: { id: string } }) {
               display: "flex",
             }}
           >
-            &ldquo;{tip.reason}&rdquo;
+            &ldquo;{tip.reason.length > 120 ? tip.reason.slice(0, 120) + "..." : tip.reason}&rdquo;
           </div>
         )}
 

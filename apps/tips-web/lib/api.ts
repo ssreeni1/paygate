@@ -26,9 +26,10 @@ export interface LeaderboardEntry {
 }
 
 export interface ClaimResult {
-  claimed_count: number;
-  total_usdc: number;
-  tx_hash: string | null;
+  claimed: number;
+  wallet: string;
+  authenticated_as?: string;
+  orgs?: string[];
 }
 
 function headers(): HeadersInit {

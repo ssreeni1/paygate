@@ -139,7 +139,14 @@ export default async function ReceiptPage({ params }: Props) {
             {tip.tx_hash && (
               <div className="flex justify-between">
                 <span className="text-text-dim">tx</span>
-                <span className="text-text-muted">{truncateHash(tip.tx_hash)}</span>
+                <a
+                  href={`https://explore.moderato.tempo.xyz/tx/${tip.tx_hash}`}
+                  target="_blank"
+                  rel="noopener"
+                  className="text-text-muted hover:text-accent"
+                >
+                  {truncateHash(tip.tx_hash)}
+                </a>
               </div>
             )}
             <div className="flex justify-between">
