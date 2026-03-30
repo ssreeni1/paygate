@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.6.0] - 2026-03-30
+
+### Added
+
+- **Agent Tips** — AI agents can now tip open source developers on-chain. `POST /paygate/tip` resolves npm packages to GitHub owners and pays via x402 or escrows for unclaimed recipients
+- **Batch tipping** — `POST /paygate/tip/batch` tips multiple packages in one call with per-tip results and automatic dedup
+- **npm→GitHub resolver** — resolves npm package names to GitHub owners via registry API with 24h SQLite cache. Handles https, git+, ssh, and github: shorthand URL formats
+- **MCP tipping tools** — `tip_open_source`, `tip_batch`, and `tip_report` tools for Claude Code and Cursor agents. Includes spend limit checks and $1 hybrid approval gate
+- **tips.paygate.fm** — Next.js web app with receipt pages (dark poster-style with OG cards), developer profiles, leaderboard, SVG README badges, and GitHub OAuth claim flow
+- **Escrow system** — unclaimed tips held in DB with 90-day timeout. Recipients claim via Sign-in-with-GitHub. Daily background task reclaims expired tips
+- **Internal API** — authenticated endpoints (`/paygate/internal/*`) for the Vercel web app to read tips, profiles, leaderboard data, and process claims
+- **DESIGN.md** — dark-first retro-futuristic design system. Satoshi + DM Sans + Geist Mono, cyan #22D3EE on near-black #0A0A0B. Receipt pages as posters, human avatars with cyan glow ring
+- **Input sanitization** — XSS protection on reason/evidence fields, amount validation ($0.01-$100), rate limiting (20 tips/min per wallet)
+
 ## [0.5.0] - 2026-03-24
 
 ### Added
