@@ -452,6 +452,7 @@ pub(crate) async fn cmd_test(is_demo: bool) {
         webhooks: Default::default(),
         storage: Default::default(),
         governance: Default::default(),
+        tips: None,
     };
 
     let state = server::AppState {

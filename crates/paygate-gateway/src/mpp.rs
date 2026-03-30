@@ -168,6 +168,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let state = AppState {

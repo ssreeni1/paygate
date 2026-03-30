@@ -110,3 +110,9 @@ All CLI output follows strict conventions (see SPEC.md §9.1):
 - Webhook URLs are validated against private IP ranges (SSRF protection)
 - Private keys are read from env vars, never stored in config files
 - SQLite `tx_hash` UNIQUE constraint is the replay protection mechanism — do not remove
+
+## Design System
+Always read DESIGN.md before making any visual or UI decisions.
+All font choices, colors, spacing, and aesthetic direction are defined there.
+Do not deviate without explicit user approval.
+In QA mode, flag any code that doesn't match DESIGN.md.

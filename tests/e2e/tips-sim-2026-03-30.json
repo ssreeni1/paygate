@@ -1,0 +1,222 @@
+{
+  "version": "0.6.0",
+  "date": "2026-03-30",
+  "duration_ms": 124,
+  "phases": {
+    "single_tip": {
+      "tests": 4,
+      "passed": 4
+    },
+    "batch_tip": {
+      "tests": 3,
+      "passed": 3
+    },
+    "npm_resolution": {
+      "tests": 2,
+      "passed": 2
+    },
+    "internal_api": {
+      "tests": 4,
+      "passed": 4
+    },
+    "claim_flow": {
+      "tests": 2,
+      "passed": 2
+    },
+    "edge_cases": {
+      "tests": 4,
+      "passed": 4
+    }
+  },
+  "total": {
+    "tests": 19,
+    "passed": 19
+  },
+  "log": [
+    {
+      "step": "Using existing gateway",
+      "timestamp": "2026-03-30T20:47:24.943Z",
+      "elapsed_ms": 1
+    },
+    {
+      "step": "Phase 1: Single Tip",
+      "timestamp": "2026-03-30T20:47:24.943Z",
+      "elapsed_ms": 1
+    },
+    {
+      "step": "T1: Tip chalk by package name",
+      "timestamp": "2026-03-30T20:47:24.974Z",
+      "elapsed_ms": 32,
+      "status": "PASS",
+      "tip_id": "tip_20260330204724_68a3dd3d6429675e",
+      "resolved_github": "chalk",
+      "receipt_status": "escrowed"
+    },
+    {
+      "step": "T2: Tip by @github_username",
+      "timestamp": "2026-03-30T20:47:24.978Z",
+      "elapsed_ms": 36,
+      "status": "PASS",
+      "resolved_github": "sindresorhus"
+    },
+    {
+      "step": "T3: Tip with evidence field",
+      "timestamp": "2026-03-30T20:47:24.982Z",
+      "elapsed_ms": 40,
+      "status": "PASS"
+    },
+    {
+      "step": "T4: Unregistered recipient gets escrowed",
+      "timestamp": "2026-03-30T20:47:24.985Z",
+      "elapsed_ms": 43,
+      "status": "PASS",
+      "tip_status": "escrowed"
+    },
+    {
+      "step": "Phase 2: Batch Tip",
+      "timestamp": "2026-03-30T20:47:24.985Z",
+      "elapsed_ms": 43
+    },
+    {
+      "step": "T5: Batch tip 3 packages",
+      "timestamp": "2026-03-30T20:47:24.991Z",
+      "elapsed_ms": 49,
+      "status": "PASS",
+      "total": 3,
+      "succeeded": 3,
+      "failed": 0
+    },
+    {
+      "step": "T6: Batch dedup same package",
+      "timestamp": "2026-03-30T20:47:24.995Z",
+      "elapsed_ms": 53,
+      "status": "PASS",
+      "results": [
+        "minimist: escrowed",
+        "minimist: skipped_duplicate"
+      ]
+    },
+    {
+      "step": "T7: Empty batch returns 400",
+      "timestamp": "2026-03-30T20:47:24.996Z",
+      "elapsed_ms": 54,
+      "status": "PASS",
+      "http_status": 400
+    },
+    {
+      "step": "Phase 3: npm Resolution",
+      "timestamp": "2026-03-30T20:47:24.996Z",
+      "elapsed_ms": 54
+    },
+    {
+      "step": "T8: Unknown package returns 404",
+      "timestamp": "2026-03-30T20:47:25.038Z",
+      "elapsed_ms": 96,
+      "status": "PASS",
+      "http_status": 404
+    },
+    {
+      "step": "T9: npm cache hit on second request",
+      "timestamp": "2026-03-30T20:47:25.045Z",
+      "elapsed_ms": 103,
+      "status": "PASS",
+      "first_ms": 4,
+      "second_ms": 3
+    },
+    {
+      "step": "Phase 4: Internal API",
+      "timestamp": "2026-03-30T20:47:25.045Z",
+      "elapsed_ms": 103
+    },
+    {
+      "step": "T10: GET /internal/tips/:id",
+      "timestamp": "2026-03-30T20:47:25.049Z",
+      "elapsed_ms": 107,
+      "status": "PASS",
+      "tip_id": "tip_20260330204725_1723d9d3faa64096",
+      "amount_usdc": 500000
+    },
+    {
+      "step": "T11: GET /internal/tips/by-recipient/:gh",
+      "timestamp": "2026-03-30T20:47:25.050Z",
+      "elapsed_ms": 108,
+      "status": "PASS",
+      "count": 4
+    },
+    {
+      "step": "T12: GET /internal/leaderboard",
+      "timestamp": "2026-03-30T20:47:25.051Z",
+      "elapsed_ms": 109,
+      "status": "PASS",
+      "entries": 13
+    },
+    {
+      "step": "T13: Non-existent tip returns 404",
+      "timestamp": "2026-03-30T20:47:25.053Z",
+      "elapsed_ms": 111,
+      "status": "PASS",
+      "http_status": 404
+    },
+    {
+      "step": "Phase 5: Claim Flow",
+      "timestamp": "2026-03-30T20:47:25.053Z",
+      "elapsed_ms": 111
+    },
+    {
+      "step": "Setup: created tip for claim test",
+      "timestamp": "2026-03-30T20:47:25.056Z",
+      "elapsed_ms": 114,
+      "tip_id": "tip_20260330204725_a268ca1f1cf41cae",
+      "status": "escrowed",
+      "user": "claim-test-1774903645053"
+    },
+    {
+      "step": "T14: Claim escrowed tips",
+      "timestamp": "2026-03-30T20:47:25.058Z",
+      "elapsed_ms": 116,
+      "status": "PASS",
+      "claimed": 1,
+      "wallet": "0x742d35Cc6634C0532925a3b844Bc9e7595f3fAE6"
+    },
+    {
+      "step": "T15: Claim with no pending tips returns 404",
+      "timestamp": "2026-03-30T20:47:25.059Z",
+      "elapsed_ms": 117,
+      "status": "PASS",
+      "http_status": 404
+    },
+    {
+      "step": "Phase 6: Edge Cases",
+      "timestamp": "2026-03-30T20:47:25.059Z",
+      "elapsed_ms": 117
+    },
+    {
+      "step": "T16: Below min amount returns 400",
+      "timestamp": "2026-03-30T20:47:25.061Z",
+      "elapsed_ms": 119,
+      "status": "PASS",
+      "http_status": 400
+    },
+    {
+      "step": "T17: Above max amount returns 400",
+      "timestamp": "2026-03-30T20:47:25.062Z",
+      "elapsed_ms": 120,
+      "status": "PASS",
+      "http_status": 400
+    },
+    {
+      "step": "T18: XSS in reason is sanitized",
+      "timestamp": "2026-03-30T20:47:25.064Z",
+      "elapsed_ms": 122,
+      "status": "PASS",
+      "sanitized_reason": "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;"
+    },
+    {
+      "step": "T19: Long reason is truncated",
+      "timestamp": "2026-03-30T20:47:25.066Z",
+      "elapsed_ms": 124,
+      "status": "PASS",
+      "stored_length": 500
+    }
+  ]
+}

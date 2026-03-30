@@ -47,6 +47,31 @@
 - **Why:** TS SDK works and is testnet-verified. Rust client is secondary — most consumers will use TS.
 - **Depends on:** Nothing.
 
+
+### Agent Tips: On-chain trustless escrow (Phase 2)
+- **What:** Migrate tip escrow from operator-custodied DB to on-chain smart contract (`PayGateEscrow.sol`).
+- **Why:** Phase 1 DB escrow means the operator holds funds. On-chain escrow eliminates money transmitter risk and builds user trust. Claimable by proving GitHub identity, reclaimable by sender after 90-day timeout.
+- **Pros:** Trustless, eliminates regulatory risk, builds user trust.
+- **Cons:** Requires smart contract deployment + audit. More complex claim flow (on-chain identity proof).
+- **Context:** `PayGateEscrow.sol` exists as an empty stub in `contracts/src/`. Needs full implementation: deposit, claim (with GitHub identity proof via oracle or attestation), reclaim after timeout. Phase 1 DB escrow in `tip.rs` works and is validated.
+- **Depends on:** Agent Tips Phase 1 shipped and validated.
+
+### Agent Tips: Multi-registry expansion (Phase 2)
+- **What:** Extend npm→GitHub resolution to support PyPI, crates.io, and direct GitHub repo tipping.
+- **Why:** npm-only is the MVP wedge. PyPI covers Python/ML community, crates.io covers Rust, GitHub repos cover everything else. 10x the addressable developer base.
+- **Pros:** Massive expansion of tippable developers.
+- **Cons:** Each registry has different metadata formats. Resolution abstraction needs to be registry-agnostic.
+- **Context:** `npm_resolver.rs` uses a `resolve_package()` function. Should be extracted to a trait/interface so new registries plug in. npm resolution is the reference implementation.
+- **Depends on:** Agent Tips Phase 1 shipped.
+
+### agent-wallet: Extract to own repo before public launch
+- **What:** Use git-filter-repo to extract `/agent-wallet/` subdirectory into `ssreeni1/agent-wallet` with clean git history.
+- **Why:** "paygate" in the repo URL hurts branding and confuses users. Clean repo for public launch (HN, Twitter).
+- **Pros:** Clean brand identity, simpler onboarding for contributors.
+- **Cons:** Loses cross-repo git blame (minor — PayGate history stays in PayGate repo).
+- **Context:** Building agent-wallet as subdirectory inside PayGate repo for dev speed. Extraction is a ~5min CC task. Must happen before any public announcement.
+- **Depends on:** agent-wallet v0.1 feature-complete.
+
 ## Completed
 
 ### Resolve Tempo mainnet chain configuration

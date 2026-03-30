@@ -36,6 +36,26 @@ pub struct Config {
     pub storage: StorageConfig,
     #[serde(default)]
     pub governance: GovernanceConfig,
+    #[serde(default)]
+    pub tips: Option<TipsConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct TipsConfig {
+    #[serde(default = "default_receipt_base_url")]
+    pub receipt_base_url: String,
+    #[serde(default)]
+    pub github_token_env: String,
+    #[serde(default = "default_internal_api_secret_env")]
+    pub internal_api_secret_env: String,
+}
+
+fn default_receipt_base_url() -> String {
+    "https://tips.paygate.fm".to_string()
+}
+
+fn default_internal_api_secret_env() -> String {
+    "PAYGATE_INTERNAL_SECRET".to_string()
 }
 
 #[derive(Debug, Clone, Deserialize)]

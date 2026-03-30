@@ -117,6 +117,11 @@ impl DbReader {
         Ok(conn)
     }
 
+    /// Expose a raw connection for modules that need direct cache access (npm_resolver, tips).
+    pub fn conn_raw(&self) -> Result<Connection, DbError> {
+        self.conn()
+    }
+
     /// Check if a tx_hash has already been consumed (replay protection).
     pub fn is_tx_consumed(&self, tx_hash: &str) -> Result<bool, DbError> {
         let conn = self.conn()?;

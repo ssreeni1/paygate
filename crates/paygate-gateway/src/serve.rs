@@ -15,6 +15,7 @@ use crate::rate_limit;
 use crate::server::AppState;
 use crate::sessions;
 use crate::sponsor;
+use crate::tip;
 use crate::verifier;
 use crate::webhook;
 use paygate_common::types::VerificationResult;
@@ -125,6 +126,14 @@ pub(crate) async fn cmd_serve(config_path: &str) {
         .route("/paygate/sessions", axum::routing::post(sessions::handle_create_session)
             .get(sessions::handle_get_sessions))
         .route("/paygate/spend", axum::routing::get(sessions::handle_get_spend))
+        // Agent Tips routes
+        .route("/paygate/tip", axum::routing::post(tip::handle_tip))
+        .route("/paygate/tip/batch", axum::routing::post(tip::handle_tip_batch))
+        // Agent Tips internal API (for Vercel web app)
+        .route("/paygate/internal/tips/{tip_id}", axum::routing::get(tip::handle_get_tip))
+        .route("/paygate/internal/tips/by-recipient/{github_username}", axum::routing::get(tip::handle_get_tips_by_recipient))
+        .route("/paygate/internal/leaderboard", axum::routing::get(tip::handle_get_leaderboard))
+        .route("/paygate/internal/claim", axum::routing::post(tip::handle_claim))
         .merge(admin::receipt_route())
         .merge(admin::transactions_route())
         .fallback(gateway_handler)
@@ -164,6 +173,12 @@ pub(crate) async fn cmd_serve(config_path: &str) {
     let cleanup_reader = db_reader.clone();
     tokio::spawn(async move {
         db::cleanup_task(cleanup_reader, retention).await;
+    });
+
+    // Spawn escrow expiry task (daily check for expired tips)
+    let expiry_reader = db_reader.clone();
+    tokio::spawn(async move {
+        tip::escrow_expiry_task(expiry_reader).await;
     });
 
     // Print startup banner
@@ -727,6 +742,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let state = AppState {
@@ -816,6 +832,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let webhook_sender = webhook_url.map(|url| {
@@ -1329,6 +1346,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let state = AppState {
@@ -1417,6 +1435,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let state = AppState {
@@ -1497,6 +1516,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let state = AppState {

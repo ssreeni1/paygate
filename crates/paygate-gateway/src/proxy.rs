@@ -200,6 +200,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
 
         let state = AppState {
@@ -271,6 +272,7 @@ mod tests {
             webhooks: Default::default(),
             storage: Default::default(),
             governance: Default::default(),
+            tips: None,
         };
         AppState {
             config: Arc::new(arc_swap::ArcSwap::new(Arc::new(config))),
