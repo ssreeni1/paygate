@@ -1,8 +1,10 @@
+import type { PayGateClient } from '@paygate/sdk';
 import { SpendTracker, formatUsd } from '../spend-tracker.js';
 import { classifyError, errorToMcpContent, spendLimitExceeded, invalidInput } from '../errors.js';
 import type { McpServerConfig, TipBatchInput, SessionTipRecord } from '../types.js';
 
 export function handleTipBatch(
+  client: PayGateClient,
   config: McpServerConfig,
   spendTracker: SpendTracker,
   sessionTips: SessionTipRecord[],
@@ -54,11 +56,14 @@ export function handleTipBatch(
         sender_name: input.sender_name ?? config.agentName,
       };
 
-      const response = await fetch(url, {
+      const response = await client.fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
+
+      const costHeader = response.headers.get('X-Payment-Cost');
+      const txHash = response.headers.get('X-Payment-Tx');
 
       const responseBody = await response.text();
       let parsed: Record<string, unknown>;
@@ -81,7 +86,20 @@ export function handleTipBatch(
         };
       }
 
-      spendTracker.record_spend(totalBaseUnits);
+      // Record spend based on ACTUAL succeeded amount from response, not total requested
+      const summary = parsed.summary as Record<string, unknown> | undefined;
+      const succeededAmountUsd = summary?.total_amount_usd as number | undefined;
+      const actualCostBaseUnits = costHeader
+        ? Math.round(parseFloat(costHeader) * 1_000_000)
+        : succeededAmountUsd != null
+          ? Math.round(succeededAmountUsd * 1_000_000)
+          : totalBaseUnits;
+
+      spendTracker.record_spend(actualCostBaseUnits);
+
+      const explorerLink = txHash
+        ? `https://testnet.tempo.xyz/tx/${txHash}`
+        : null;
 
       const results = (parsed.results ?? parsed.tips ?? []) as Array<Record<string, unknown>>;
       for (let i = 0; i < results.length; i++) {
@@ -95,26 +113,29 @@ export function handleTipBatch(
           amountBaseUnits: Math.round((tip?.amount ?? 0) * 1_000_000),
           status: (r.status as string) ?? 'confirmed',
           receiptUrl: (r.receipt_url as string) ?? null,
-          txHash: (r.tx_hash as string) ?? null,
+          txHash: txHash ?? (r.tx_hash as string) ?? null,
           tipId: (r.tip_id as string) ?? null,
           timestamp: Date.now(),
         });
       }
 
       process.stderr.write(
-        `[paygate] batch tip — ${results.length} tips — total: ${formatUsd(totalBaseUnits)}\n`
+        `[paygate] batch tip — ${results.length} tips — total: ${formatUsd(actualCostBaseUnits)}` +
+        (explorerLink ? ` — ${explorerLink}` : '') + '\n'
       );
-
-      const summary = {
-        tipsCount: results.length,
-        totalAmount: formatUsd(totalBaseUnits),
-        results,
-      };
 
       return {
         content: [{
           type: 'text',
-          text: JSON.stringify(summary, null, 2),
+          text: JSON.stringify({
+            tipsCount: results.length,
+            totalAmount: formatUsd(actualCostBaseUnits),
+            results,
+            payment: {
+              cost: formatUsd(actualCostBaseUnits),
+              explorerLink: explorerLink ?? 'N/A',
+            },
+          }, null, 2),
         }],
       };
     } catch (err) {

@@ -19,11 +19,11 @@ import { handleCall } from './tools/call.js';
 import { handleBudget } from './tools/budget.js';
 import { handleEstimate } from './tools/estimate.js';
 import { handleTrace } from './tools/trace.js';
-import { handleTip } from './tools/tip.js';
+import { handleTip, handleTipConfirm } from './tools/tip.js';
 import { handleTipBatch } from './tools/tip-batch.js';
 import { handleTipReport } from './tools/tip-report.js';
 import { invalidInput, errorToMcpContent } from './errors.js';
-import type { McpServerConfig, ActiveTrace, CallInput, DiscoverInput, EstimateInput, TraceInput, TipInput, TipBatchInput, SessionTipRecord } from './types.js';
+import type { McpServerConfig, ActiveTrace, CallInput, DiscoverInput, EstimateInput, TraceInput, TipInput, TipConfirmInput, TipBatchInput, SessionTipRecord } from './types.js';
 
 async function main(): Promise<void> {
   const privateKey = loadPrivateKey();
@@ -171,6 +171,17 @@ async function main(): Promise<void> {
       },
     },
     {
+      name: 'tip_confirm',
+      description: 'Confirm a high-value tip (>= $1.00) that was previously requested via tip_open_source. Provide the confirmation token returned by the original tip request.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          token: { type: 'string', description: 'The confirmation token from the tip_open_source response' },
+        },
+        required: ['token'],
+      },
+    },
+    {
       name: 'tip_batch',
       description: 'Send multiple tips in a single batch. Each tip goes to an open-source package or maintainer.',
       inputSchema: {
@@ -207,8 +218,9 @@ async function main(): Promise<void> {
   const budgetHandler = handleBudget(spendTracker, sessionManager, config);
   const estimateHandler = handleEstimate(pricingCache, spendTracker);
   const traceHandler = handleTrace(activeTraces);
-  const tipHandler = handleTip(config, spendTracker, sessionTips);
-  const tipBatchHandler = handleTipBatch(config, spendTracker, sessionTips);
+  const tipHandler = handleTip(sdkClient, config, spendTracker, sessionTips);
+  const tipConfirmHandler = handleTipConfirm(sdkClient, config, spendTracker, sessionTips);
+  const tipBatchHandler = handleTipBatch(sdkClient, config, spendTracker, sessionTips);
   const tipReportHandler = handleTipReport(sessionTips);
 
   const server = new Server(
@@ -236,6 +248,8 @@ async function main(): Promise<void> {
         return traceHandler((args ?? {}) as unknown as TraceInput);
       case 'tip_open_source':
         return tipHandler((args ?? {}) as unknown as TipInput);
+      case 'tip_confirm':
+        return tipConfirmHandler((args ?? {}) as unknown as TipConfirmInput);
       case 'tip_batch':
         return tipBatchHandler((args ?? {}) as unknown as TipBatchInput);
       case 'tip_report':

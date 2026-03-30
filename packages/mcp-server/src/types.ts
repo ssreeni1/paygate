@@ -110,6 +110,10 @@ export interface TipInput {
   evidence?: string;
 }
 
+export interface TipConfirmInput {
+  token: string;
+}
+
 export interface TipBatchInput {
   tips: Array<{
     target: string;
