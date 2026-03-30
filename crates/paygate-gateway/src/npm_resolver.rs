@@ -141,11 +141,10 @@ pub async fn resolve_package(
         return Ok(cached);
     }
 
-    // Fetch from npm registry (abbreviated metadata)
+    // Fetch from npm registry (full metadata — abbreviated doesn't include repository)
     let url = format!("https://registry.npmjs.org/{package_name}");
     let resp = http_client
         .get(&url)
-        .header("Accept", "application/vnd.npm.install-v1+json")
         .timeout(std::time::Duration::from_secs(10))
         .send()
         .await?;
