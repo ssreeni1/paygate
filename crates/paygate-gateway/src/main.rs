@@ -6,6 +6,7 @@ mod helpers;
 mod metrics;
 mod mpp;
 mod npm_resolver;
+mod payout;
 mod proxy;
 mod rate_limit;
 mod serve;

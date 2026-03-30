@@ -821,13 +821,62 @@ pub async fn handle_claim(
     })();
 
     match claim_result {
-        Ok(updated) => {
+        Ok(updated) if updated > 0 => {
             crate::metrics::record_tips_claimed(updated as u64);
+
+            // Calculate total amount to transfer
+            let total_amount: i64 = {
+                let mut total = 0i64;
+                for target in &claim_targets {
+                    total += conn.query_row(
+                        "SELECT COALESCE(SUM(amount_usdc), 0) FROM tips WHERE recipient_gh = ? AND status = 'claimed' AND claim_wallet = ?",
+                        params![target, req.wallet_address],
+                        |row| row.get::<_, i64>(0),
+                    ).unwrap_or(0);
+                }
+                total
+            };
+
+            // Send USDC from gateway wallet to claim wallet (on-chain payout)
+            let payout_tx = if total_amount > 0 {
+                match crate::payout::transfer_usdc(&state, &req.wallet_address, total_amount as u64).await {
+                    Ok(tx_hash) => {
+                        info!(
+                            github = %gh_lower,
+                            wallet = %req.wallet_address,
+                            amount = total_amount,
+                            tx_hash = %tx_hash,
+                            "payout sent"
+                        );
+                        Some(tx_hash)
+                    }
+                    Err(e) => {
+                        // Payout failed but tips are still marked claimed.
+                        // A background retry can handle this later.
+                        warn!(
+                            github = %gh_lower,
+                            wallet = %req.wallet_address,
+                            amount = total_amount,
+                            error = %e,
+                            "payout failed — tips claimed but transfer pending"
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            };
+
             info!(github = %gh_lower, wallet = %req.wallet_address, tips_claimed = updated, "tips claimed");
             (StatusCode::OK, Json(json!({
                 "claimed": updated,
                 "wallet": req.wallet_address,
+                "payout_tx": payout_tx,
+                "amount_usdc": total_amount,
             }))).into_response()
+        }
+        Ok(_) => {
+            (StatusCode::NOT_FOUND, Json(json!({ "error": "No unclaimed tips" }))).into_response()
         }
         Err(e) => {
             error!(error = %e, "claim transaction failed");
