@@ -54,6 +54,23 @@ pub fn set_active_quotes(count: u64) {
     gauge!("paygate_quotes_active").set(count as f64);
 }
 
+// Tips
+pub fn record_tip_created(recipient: &str) {
+    counter!("paygate_tips_created_total", "recipient" => recipient.to_string()).increment(1);
+}
+
+pub fn record_tips_claimed(count: u64) {
+    counter!("paygate_tips_claimed_total").increment(count);
+}
+
+pub fn record_tips_expired(count: u64) {
+    counter!("paygate_tips_expired_total").increment(count);
+}
+
+pub fn record_tip_notification(status: &str) {
+    counter!("paygate_tip_notifications_total", "status" => status.to_string()).increment(1);
+}
+
 // Config reloads
 pub fn record_config_reload(status: &str) {
     counter!("paygate_config_reloads_total", "status" => status.to_string()).increment(1);

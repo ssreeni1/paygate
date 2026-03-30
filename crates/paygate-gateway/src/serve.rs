@@ -115,9 +115,18 @@ pub(crate) async fn cmd_serve(config_path: &str) {
     // Build admin router
     let admin_app = admin::admin_router(state.clone());
 
-    // Build main gateway router with verifier's gateway_handler + rate limiter middleware
+    // Check internal secret at startup
+    tip::check_internal_secret();
+
+    // Build main gateway router with CORS
+    let allowed_origins = config.tips.as_ref()
+        .map(|t| t.receipt_base_url.clone())
+        .unwrap_or_else(|| "https://tips.paygate.fm".to_string());
     let cors = tower_http::cors::CorsLayer::new()
-        .allow_origin(tower_http::cors::Any)
+        .allow_origin([
+            allowed_origins.parse().unwrap_or_else(|_| "https://tips.paygate.fm".parse().unwrap()),
+            "http://localhost:3000".parse().unwrap(),
+        ])
         .allow_methods([axum::http::Method::GET, axum::http::Method::POST, axum::http::Method::OPTIONS])
         .allow_headers(tower_http::cors::Any);
 

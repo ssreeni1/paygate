@@ -86,6 +86,21 @@ pub enum WriteCommand {
         id: String,
         amount: u64,
     },
+    InsertTip {
+        id: String,
+        sender_wallet: String,
+        sender_name: Option<String>,
+        recipient_gh: String,
+        package_name: Option<String>,
+        amount_usdc: i64,
+        reason: String,
+        evidence: Option<String>,
+        status: String,
+        tx_hash: Option<String>,
+        created_at: String,
+        expires_at: String,
+        reply: tokio::sync::oneshot::Sender<Result<(), DbError>>,
+    },
     InsertRequestLog {
         payment_id: Option<String>,
         session_id: Option<String>,
@@ -612,6 +627,37 @@ impl DbWriter {
         Ok(())
     }
 
+    /// Insert a tip record (awaits result for confirmation).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn insert_tip(
+        &self,
+        id: String,
+        sender_wallet: String,
+        sender_name: Option<String>,
+        recipient_gh: String,
+        package_name: Option<String>,
+        amount_usdc: i64,
+        reason: String,
+        evidence: Option<String>,
+        status: String,
+        tx_hash: Option<String>,
+        created_at: String,
+        expires_at: String,
+    ) -> Result<(), DbError> {
+        let (reply_tx, reply_rx) = tokio::sync::oneshot::channel();
+        self.tx
+            .try_send(WriteCommand::InsertTip {
+                id, sender_wallet, sender_name, recipient_gh, package_name,
+                amount_usdc, reason, evidence, status, tx_hash,
+                created_at, expires_at, reply: reply_tx,
+            })
+            .map_err(|e| match e {
+                mpsc::error::TrySendError::Full(_) => DbError::Backpressure,
+                mpsc::error::TrySendError::Closed(_) => DbError::ChannelClosed,
+            })?;
+        reply_rx.await.map_err(|_| DbError::ChannelClosed)?
+    }
+
     /// Current channel queue depth (for metrics).
     pub fn queue_depth(&self) -> usize {
         // mpsc::Sender doesn't expose queue depth directly;
@@ -830,6 +876,23 @@ fn flush_batch(conn: &Connection, batch: &mut Vec<WriteCommand>) {
                      WHERE id = ?",
                     params![amount as i64, id],
                 );
+            }
+            WriteCommand::InsertTip {
+                id, sender_wallet, sender_name, recipient_gh, package_name,
+                amount_usdc, reason, evidence, status, tx_hash,
+                created_at, expires_at, reply,
+            } => {
+                let result = conn.execute(
+                    "INSERT INTO tips (id, sender_wallet, sender_name, recipient_gh, package_name,
+                     amount_usdc, reason, evidence, status, tx_hash, created_at, expires_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    params![
+                        id, sender_wallet, sender_name, recipient_gh, package_name,
+                        amount_usdc, reason, evidence, status, tx_hash,
+                        created_at, expires_at,
+                    ],
+                );
+                let _ = reply.send(result.map(|_| ()).map_err(DbError::Sqlite));
             }
             WriteCommand::InsertRequestLog {
                 payment_id,

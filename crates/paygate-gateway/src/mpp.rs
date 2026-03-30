@@ -117,6 +117,86 @@ pub async fn payment_required_response(state: &AppState, endpoint: &str) -> Resp
     response
 }
 
+/// Generate a 402 Payment Required response with a specific price (for tips).
+pub async fn payment_required_response_with_price(
+    state: &AppState,
+    endpoint: &str,
+    price: u64,
+) -> Response {
+    let config = state.current_config();
+    let quote_id = format!("qt_{}", &uuid::Uuid::new_v4().simple().to_string()[..12]);
+    let now = chrono::Utc::now();
+    let expires_at = now + chrono::Duration::seconds(config.pricing.quote_ttl_seconds as i64);
+
+    let accepted_token: alloy_primitives::Address =
+        config.tempo.accepted_token.parse().unwrap_or_default();
+    let quote = Quote {
+        id: quote_id.clone(),
+        endpoint: endpoint.to_string(),
+        price,
+        token: accepted_token,
+        created_at: now.timestamp(),
+        expires_at: expires_at.timestamp(),
+    };
+    let _ = state.db_writer.insert_quote(quote).await;
+
+    let amount_str = format_amount(price, TOKEN_DECIMALS);
+    let provider_addr = &config.provider.address;
+
+    let pricing = json!({
+        "amount": amount_str,
+        "amount_base_units": price,
+        "decimals": TOKEN_DECIMALS,
+        "token": config.tempo.accepted_token,
+        "recipient": provider_addr,
+        "quote_id": quote_id,
+        "quote_expires_at": expires_at.to_rfc3339(),
+        "methods": ["direct"]
+    });
+
+    let body = json!({
+        "error": "payment_required",
+        "message": format!("Send {amount_str} USDC to {provider_addr} on Tempo, then retry with X-Payment-Tx header."),
+        "help_url": "https://ssreeni1.github.io/paygate/quickstart#paying",
+        "pricing": pricing
+    });
+
+    let mut response = (StatusCode::PAYMENT_REQUIRED, Json(body)).into_response();
+    let h = response.headers_mut();
+
+    let _ = h.insert(HEADER_PAYMENT_REQUIRED, HeaderValue::from_static("true"));
+    if let Ok(v) = HeaderValue::from_str(&price.to_string()) {
+        let _ = h.insert(HEADER_PAYMENT_AMOUNT, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&TOKEN_DECIMALS.to_string()) {
+        let _ = h.insert(HEADER_PAYMENT_DECIMALS, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&config.tempo.accepted_token) {
+        let _ = h.insert(HEADER_PAYMENT_TOKEN, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(provider_addr) {
+        let _ = h.insert(HEADER_PAYMENT_RECIPIENT, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&format!("tempo-{}", config.tempo.network)) {
+        let _ = h.insert(HEADER_PAYMENT_NETWORK, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&config.tempo.chain_id.to_string()) {
+        let _ = h.insert(HEADER_PAYMENT_CHAIN_ID, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&quote_id) {
+        let _ = h.insert(HEADER_PAYMENT_QUOTE_ID_RESP, v);
+    }
+    if let Ok(v) = HeaderValue::from_str(&expires_at.timestamp().to_string()) {
+        let _ = h.insert(HEADER_PAYMENT_QUOTE_EXPIRES, v);
+    }
+    let _ = h.insert(
+        HEADER_PAYMENT_METHODS,
+        HeaderValue::from_static("direct"),
+    );
+
+    response
+}
+
 // Test 12: 402 response format
 #[cfg(test)]
 mod tests {
