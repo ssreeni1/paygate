@@ -7,7 +7,7 @@ export const metadata: Metadata = {
 };
 
 export default async function LeaderboardPage() {
-  let entries;
+  let entries: Awaited<ReturnType<typeof getLeaderboard>> = [];
   try {
     entries = await getLeaderboard();
   } catch {
