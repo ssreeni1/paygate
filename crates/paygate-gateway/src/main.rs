@@ -5,12 +5,14 @@ mod db;
 mod helpers;
 mod metrics;
 mod mpp;
+mod npm_resolver;
 mod proxy;
 mod rate_limit;
 mod serve;
 mod server;
 mod sessions;
 mod sponsor;
+mod tip;
 mod verifier;
 mod webhook;
 
