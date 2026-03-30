@@ -19,8 +19,11 @@ import { handleCall } from './tools/call.js';
 import { handleBudget } from './tools/budget.js';
 import { handleEstimate } from './tools/estimate.js';
 import { handleTrace } from './tools/trace.js';
+import { handleTip } from './tools/tip.js';
+import { handleTipBatch } from './tools/tip-batch.js';
+import { handleTipReport } from './tools/tip-report.js';
 import { invalidInput, errorToMcpContent } from './errors.js';
-import type { McpServerConfig, ActiveTrace, CallInput, DiscoverInput, EstimateInput, TraceInput } from './types.js';
+import type { McpServerConfig, ActiveTrace, CallInput, DiscoverInput, EstimateInput, TraceInput, TipInput, TipBatchInput, SessionTipRecord } from './types.js';
 
 async function main(): Promise<void> {
   const privateKey = loadPrivateKey();
@@ -85,6 +88,7 @@ async function main(): Promise<void> {
   const spendTracker = new SpendTracker(config.spendLimitDaily, config.spendLimitMonthly);
   const sessionManager = new SessionManager(sdkClient, config);
   const activeTraces = new Map<string, ActiveTrace>();
+  const sessionTips: SessionTipRecord[] = [];
 
   await sessionManager.tryResumeSession();
 
@@ -152,6 +156,50 @@ async function main(): Promise<void> {
         required: ['action', 'name'],
       },
     },
+    {
+      name: 'tip_open_source',
+      description: 'Tip an open-source package or maintainer. Sends a stablecoin micropayment on-chain. WARNING: The evidence field is PUBLIC on the receipt page. Do not include file paths, customer names, or proprietary information.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          target: { type: 'string', description: 'npm package name (e.g. "express") or GitHub username prefixed with @ (e.g. "@sindresorhus")' },
+          amount: { type: 'number', description: 'Tip amount in USD (e.g. 0.25)' },
+          reason: { type: 'string', description: 'Why you are tipping (shown on receipt)' },
+          evidence: { type: 'string', description: 'Optional: public evidence of usage (e.g. "used in API route handler"). WARNING: this is PUBLIC — do not include file paths, customer names, or proprietary information.' },
+        },
+        required: ['target', 'amount', 'reason'],
+      },
+    },
+    {
+      name: 'tip_batch',
+      description: 'Send multiple tips in a single batch. Each tip goes to an open-source package or maintainer.',
+      inputSchema: {
+        type: 'object' as const,
+        properties: {
+          tips: {
+            type: 'array',
+            description: 'List of tips to send',
+            items: {
+              type: 'object',
+              properties: {
+                target: { type: 'string', description: 'npm package name or @github_username' },
+                amount: { type: 'number', description: 'Tip amount in USD' },
+                reason: { type: 'string', description: 'Why you are tipping' },
+                evidence: { type: 'string', description: 'Optional: public evidence of usage. WARNING: this is PUBLIC.' },
+              },
+              required: ['target', 'amount', 'reason'],
+            },
+          },
+          sender_name: { type: 'string', description: 'Optional: override the default agent name on receipts' },
+        },
+        required: ['tips'],
+      },
+    },
+    {
+      name: 'tip_report',
+      description: 'Get a markdown-formatted summary of all tips made in this session, with a table of recipients, amounts, statuses, and receipt URLs.',
+      inputSchema: { type: 'object' as const, properties: {} },
+    },
   ];
 
   const discoverHandler = handleDiscover(pricingCache);
@@ -159,6 +207,9 @@ async function main(): Promise<void> {
   const budgetHandler = handleBudget(spendTracker, sessionManager, config);
   const estimateHandler = handleEstimate(pricingCache, spendTracker);
   const traceHandler = handleTrace(activeTraces);
+  const tipHandler = handleTip(config, spendTracker, sessionTips);
+  const tipBatchHandler = handleTipBatch(config, spendTracker, sessionTips);
+  const tipReportHandler = handleTipReport(sessionTips);
 
   const server = new Server(
     { name: 'paygate', version: '0.5.0' },
@@ -183,6 +234,12 @@ async function main(): Promise<void> {
         return estimateHandler((args ?? {}) as unknown as EstimateInput);
       case 'paygate_trace':
         return traceHandler((args ?? {}) as unknown as TraceInput);
+      case 'tip_open_source':
+        return tipHandler((args ?? {}) as unknown as TipInput);
+      case 'tip_batch':
+        return tipBatchHandler((args ?? {}) as unknown as TipBatchInput);
+      case 'tip_report':
+        return tipReportHandler();
       default:
         return errorToMcpContent(invalidInput(`Unknown tool: ${name}`));
     }

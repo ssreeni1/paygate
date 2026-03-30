@@ -102,3 +102,33 @@ export interface TraceInput {
   action: 'start' | 'stop';
   name: string;
 }
+
+export interface TipInput {
+  target: string;
+  amount: number;
+  reason: string;
+  evidence?: string;
+}
+
+export interface TipBatchInput {
+  tips: Array<{
+    target: string;
+    amount: number;
+    reason: string;
+    evidence?: string;
+  }>;
+  sender_name?: string;
+}
+
+export interface SessionTipRecord {
+  target: string;
+  recipient: string;
+  resolvedGithub: string | null;
+  amount: number;
+  amountBaseUnits: number;
+  status: string;
+  receiptUrl: string | null;
+  txHash: string | null;
+  tipId: string | null;
+  timestamp: number;
+}
