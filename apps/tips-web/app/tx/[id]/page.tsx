@@ -65,11 +65,8 @@ export default async function ReceiptPage({ params }: Props) {
   return (
     <div className="flex justify-center px-md py-2xl">
       <div className="w-full max-w-receipt print-in">
-        <pre className="text-text-dim text-small leading-tight mb-sm select-none">
-{`┌──────────────────────────────────────────────┐`}
-        </pre>
-
-        <div className="border-x border-border-subtle px-lg py-xl">
+        <div className="border border-border-subtle">
+          <div className="px-lg py-xl">
           <div className="text-center mb-xl">
             <p className="text-label text-text-dim uppercase tracking-widest mb-md">
               tip receipt
@@ -162,11 +159,7 @@ export default async function ReceiptPage({ params }: Props) {
               {" "}from {agentCount} agent{agentCount !== 1 ? "s" : ""}
             </p>
           </div>
-        </div>
-
-        <pre className="text-text-dim text-small leading-tight mt-sm select-none">
-{`└──────────────────────────────────────────────┘`}
-        </pre>
+        </div></div>
       </div>
     </div>
   );

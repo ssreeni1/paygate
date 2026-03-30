@@ -66,7 +66,19 @@ export async function getTipsByRecipient(
 
 /** Fetch the leaderboard. */
 export async function getLeaderboard(): Promise<LeaderboardEntry[]> {
-  return fetchInternal<LeaderboardEntry[]>(`/paygate/internal/leaderboard`);
+  // API returns total_amount, map to total_usdc for frontend consistency
+  const raw = await fetchInternal<Array<{
+    github_username: string;
+    total_amount: number;
+    tip_count: number;
+    agent_count: number;
+  }>>(`/paygate/internal/leaderboard`);
+  return raw.map((e) => ({
+    github_username: e.github_username,
+    total_usdc: e.total_amount,
+    tip_count: e.tip_count,
+    agent_count: e.agent_count,
+  }));
 }
 
 /** Claim all escrowed tips for a GitHub user. */
